@@ -37,6 +37,21 @@ from PyQt6.QtGui import (
     QMouseEvent, QPaintEvent, QKeyEvent, QAction, QDrag
 )
 
+# ============== 크기 상수 ==============
+# 덱 편집창 리스트 아이템 크기
+DECK_ICON_WIDTH = 100
+DECK_ICON_HEIGHT = 120
+DECK_GRID_WIDTH = 120
+DECK_GRID_HEIGHT = 160
+DECK_SPACING = 3
+
+# 히스토리 창 리스트 아이템 크기
+HISTORY_ICON_WIDTH = 300
+HISTORY_ICON_HEIGHT = 150
+HISTORY_GRID_WIDTH = 320
+HISTORY_GRID_HEIGHT = 185
+HISTORY_SPACING = 5
+
 # ============== 로깅 설정 ==============
 def setup_logging():
     """로깅 시스템 초기화"""
@@ -70,8 +85,8 @@ TRANSLATIONS = {
         "less": "Less",
         "more": "More",
         "basic_settings": "기본 설정",
-        "image_folder": "그림 폴더:",
-        "select_folder": "폴더 선택",
+        "croquis_deck": "크로키 덱:",
+        "select_deck": "덱 선택",
         "image_settings": "이미지 설정",
         "image_width": "이미지 창 너비:",
         "image_height": "이미지 창 높이:",
@@ -128,8 +143,8 @@ TRANSLATIONS = {
         "less": "Less",
         "more": "More",
         "basic_settings": "Basic Settings",
-        "image_folder": "Image Folder:",
-        "select_folder": "Select Folder",
+        "croquis_deck": "Croquis Deck:",
+        "select_deck": "Select Deck",
         "image_settings": "Image Settings",
         "image_width": "Image Window Width:",
         "image_height": "Image Window Height:",
@@ -218,7 +233,6 @@ class CroquisSettings:
     image_folder: str = ""
     image_width: int = 400
     image_height: int = 700
-    random_order: bool = False
     grayscale: bool = False
     flip_horizontal: bool = False
     timer_position: str = "bottom_right"
@@ -571,11 +585,10 @@ class ImageViewerWindow(QWidget):
         self.elapsed_time = 0  # 학습 모드용 경과 시간
         self.random_seed = None
         
-        if settings.random_order:
-            self.random_seed = random.randint(0, 1000000)
-            random.seed(self.random_seed)
-            # 난이도 기반 가중치 랜덤 선택
-            self.images = self.weighted_shuffle(self.images)
+        # 항상 랜덤 모드 (난이도 기반 가중치 랜덤 선택)
+        self.random_seed = random.randint(0, 1000000)
+        random.seed(self.random_seed)
+        self.images = self.weighted_shuffle(self.images)
         
         self.setup_ui()
         self.setup_timer()
@@ -626,8 +639,22 @@ class ImageViewerWindow(QWidget):
         return result
         
     def setup_ui(self):
-        self.setWindowTitle(tr("app_title", self.lang))
-        self.resize(self.settings.image_width, self.settings.image_height + 50)
+        # 타이틀바 제거 및 창 설정
+        self.setWindowFlags(
+            Qt.WindowType.Window | 
+            Qt.WindowType.FramelessWindowHint |
+            Qt.WindowType.WindowStaysOnTopHint  # 다른 프로그램보다 위
+        )
+        self.setFixedSize(self.settings.image_width, self.settings.image_height + 50)  # 크기 조정 불가
+        
+        # 중앙에 배치
+        screen = QGuiApplication.primaryScreen().geometry()
+        x = (screen.width() - self.settings.image_width) // 2
+        y = (screen.height() - (self.settings.image_height + 50)) // 2
+        self.move(x, y)
+        
+        # 드래그 이동을 위한 변수
+        self.drag_position = None
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -960,6 +987,32 @@ class ImageViewerWindow(QWidget):
             self.screenshot_overlay = None
         self.croquis_completed.emit()
         self.close()
+    
+    def closeEvent(self, event):
+        """창 닫기 이벤트 처리"""
+        logger.info("크로키 창 닫기")
+        if hasattr(self, 'timer') and self.timer:
+            self.timer.stop()
+            self.timer.deleteLater()
+            self.timer = None
+        if hasattr(self, 'screenshot_overlay') and self.screenshot_overlay:
+            self.screenshot_overlay.hide()
+            self.screenshot_overlay.close()
+            self.screenshot_overlay = None
+        self.croquis_completed.emit()
+        event.accept()
+    
+    def mousePressEvent(self, event: QMouseEvent):
+        """마우스 클릭 시 드래그 시작"""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+    
+    def mouseMoveEvent(self, event: QMouseEvent):
+        """마우스 이동 시 창 이동"""
+        if event.buttons() == Qt.MouseButton.LeftButton and self.drag_position is not None:
+            self.move(event.globalPosition().toPoint() - self.drag_position)
+            event.accept()
         
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -1035,12 +1088,12 @@ class DeckItemWidget(QWidget):
         
         # 이미지 컨테이너
         container = QWidget()
-        container.setFixedSize(100, 120)
+        container.setFixedSize(DECK_ICON_WIDTH, DECK_ICON_HEIGHT)
         
         # 이미지 라벨
         image_label = QLabel(container)
         image_label.setPixmap(self.pixmap)
-        image_label.setFixedSize(100, 120)
+        image_label.setFixedSize(DECK_ICON_WIDTH, DECK_ICON_HEIGHT)
         image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # 난이도 버튼 (클릭 가능)
@@ -1053,7 +1106,7 @@ class DeckItemWidget(QWidget):
         layout.addWidget(container)
         
         # 파일명
-        filename_label = QLabel(f"{self.img_data['filename']})")
+        filename_label = QLabel(f"{self.img_data['filename']}")
         filename_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         filename_label.setWordWrap(True)
         filename_label.setStyleSheet("font-size: 9px;")
@@ -1095,7 +1148,7 @@ class DeckItemWidget(QWidget):
         # 버튼 위치 (우측 하단)
         btn_size = diff_pixmap.size()
         self.difficulty_btn.setFixedSize(btn_size)
-        self.difficulty_btn.move(100 - btn_size.width() - 5, 120 - btn_size.height() - 5)
+        self.difficulty_btn.move(90 - btn_size.width(), 110 - btn_size.height())
     
     def cycle_difficulty(self):
         """난이도 순환 (1→2→3→4→5→1)"""
@@ -1116,10 +1169,214 @@ class DeckItemWidget(QWidget):
         self.update_difficulty_display()
         
         # 파일명 라벨도 업데이트
-        self.filename_label.setText(f"{self.img_data['filename']})")
+        self.filename_label.setText(f"{self.img_data['filename']}")
         
         self.parent_window.save_temp_file()
         self.parent_window.mark_modified()
+
+
+# ============== 이미지 속성 다이얼로그 ==============
+class ImageRenameDialog(QDialog):
+    """이미지 이름 바꾸기 다이얼로그"""
+    
+    def __init__(self, current_name: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("이름 바꾸기")
+        self.resize(380, 160)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+        
+        # 파일명에서 확장자 분리
+        import os
+        name_without_ext, ext = os.path.splitext(current_name)
+        self.extension = ext
+        
+        # 현재 이름 표시
+        current_layout = QHBoxLayout()
+        current_layout.addWidget(QLabel("<b>현재:</b>"))
+        current_label = QLabel(current_name)
+        current_label.setStyleSheet("color: #666; padding: 3px;")
+        current_layout.addWidget(current_label, 1)
+        layout.addLayout(current_layout)
+        
+        # 새 이름 입력
+        new_layout = QHBoxLayout()
+        new_layout.addWidget(QLabel("<b>새 이름:</b>"))
+        self.name_edit = QLineEdit()
+        self.name_edit.setText(name_without_ext)
+        self.name_edit.selectAll()
+        self.name_edit.setPlaceholderText("확장자 제외")
+        new_layout.addWidget(self.name_edit, 1)
+        layout.addLayout(new_layout)
+        
+        # 금지된 문자 안내
+        invalid_chars_label = QLabel("❌ 사용 불가: \\ / : * ? \" < > | .")
+        invalid_chars_label.setStyleSheet("color: #999; font-size: 10px; padding: 3px;")
+        layout.addWidget(invalid_chars_label)
+        
+        layout.addStretch()
+        
+        # 버튼
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def get_new_name(self) -> str:
+        """새 파일명 반환 (확장자 포함)"""
+        new_name = self.name_edit.text().strip()
+        
+        # 금지된 문자 제거
+        invalid_chars = ['\\', '/', ':', '*', '?', '"', '<', '>', '|', '.']
+        for char in invalid_chars:
+            new_name = new_name.replace(char, '')
+        
+        return new_name + self.extension if new_name else None
+
+
+class ImageTagDialog(QDialog):
+    """이미지 태그 설정 다이얼로그"""
+    
+    def __init__(self, current_tags: List[str], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("태그 설정")
+        self.resize(420, 170)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(12)
+        
+        # 안내 레이블
+        info_label = QLabel("🏷️ '#'로 구분하여 태그를 입력하세요 (각 태그 최대 24자)")
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("font-weight: bold; padding: 5px;")
+        layout.addWidget(info_label)
+        
+        # 예시 레이블
+        example_label = QLabel("예) #여성#전신#역동적")
+        example_label.setStyleSheet("color: #666; font-size: 11px; padding-left: 5px;")
+        layout.addWidget(example_label)
+        
+        # 태그 입력
+        self.tag_edit = QLineEdit()
+        self.tag_edit.setPlaceholderText("#태그1#태그2#태그3")
+        if current_tags:
+            self.tag_edit.setText('#' + '#'.join(current_tags))
+        self.tag_edit.setStyleSheet("padding: 8px; font-size: 12px;")
+        layout.addWidget(self.tag_edit)
+        
+        layout.addStretch()
+        
+        # 버튼
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def get_tags(self) -> List[str]:
+        """태그 리스트 반환"""
+        text = self.tag_edit.text().strip()
+        if not text:
+            return []
+        
+        # '#'로 시작하지 않으면 첫 '#' 전까지 제거
+        if not text.startswith('#'):
+            hash_pos = text.find('#')
+            if hash_pos > 0:
+                text = text[hash_pos:]
+            elif hash_pos == -1:
+                # '#'가 없으면 빈 리스트 반환
+                return []
+        
+        # '#'로 분리
+        tags = [tag.strip() for tag in text.split('#') if tag.strip()]
+        
+        # 각 태그 최대 24자로 제한
+        tags = [tag[:24] for tag in tags]
+        
+        return tags
+
+
+class ImagePropertiesDialog(QDialog):
+    """이미지 속성 다이얼로그"""
+    
+    def __init__(self, img_data: dict, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("속성")
+        self.resize(450, 320)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # 제목
+        title = QLabel("📋 이미지 속성")
+        title.setStyleSheet("font-size: 14px; font-weight: bold; padding-bottom: 5px;")
+        layout.addWidget(title)
+        
+        # 이미지 정보 표시 (그리드 레이아웃)
+        info_widget = QWidget()
+        info_layout = QVBoxLayout(info_widget)
+        info_layout.setSpacing(8)
+        
+        properties = [
+            ("📄 파일 이름", img_data.get('filename', 'Unknown')),
+            ("💾 용량", self.format_size(img_data.get('size', 0))),
+            ("📐 크기", f"{img_data.get('width', 0)} × {img_data.get('height', 0)} px"),
+            ("⭐ 난이도", f"{img_data.get('difficulty', 1)} {'★' * img_data.get('difficulty', 1)}"),
+            ("🏷️ 태그", ', '.join(img_data.get('tags', [])) if img_data.get('tags') else '없음'),
+            ("📍 원본 경로", img_data.get('original_path', 'Unknown'))
+        ]
+        
+        for label_text, value_text in properties:
+            prop_layout = QHBoxLayout()
+            label = QLabel(label_text)
+            label.setStyleSheet("font-weight: bold; min-width: 90px;")
+            value = QLabel(str(value_text))
+            value.setWordWrap(True)
+            value.setStyleSheet("color: #555;")
+            prop_layout.addWidget(label)
+            prop_layout.addWidget(value, 1)
+            info_layout.addLayout(prop_layout)
+        
+        layout.addWidget(info_widget)
+        layout.addStretch()
+        
+        # 닫기 버튼
+        close_btn = QPushButton("닫기")
+        close_btn.setFixedHeight(32)
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn)
+    
+    def format_size(self, size_bytes: int) -> str:
+        """바이트를 읽기 쉬운 형식으로 변환"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.1f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.1f} TB"
+
+
+# ============== 커스텀 덱 리스트 위젯 ==============
+class DeckListWidget(QListWidget):
+    """커스텀 리스트 위젯"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+    
+    def keyPressEvent(self, event):
+        """키보드 이벤트 처리 (Ctrl+V 붙여넣기)"""
+        if event.key() == Qt.Key.Key_V and event.modifiers() == Qt.KeyboardModifier.ControlModifier:
+            # 부모 윈도우의 paste_image_from_clipboard 호출
+            parent_window = self.parent()
+            while parent_window and not isinstance(parent_window, DeckEditorWindow):
+                parent_window = parent_window.parent()
+            if parent_window:
+                parent_window.paste_image_from_clipboard()
+        else:
+            super().keyPressEvent(event)
 
 
 # ============== 크로키 덱 편집기 ==============
@@ -1134,6 +1391,14 @@ class DeckEditorWindow(QMainWindow):
         self.current_deck_path = None
         self.temp_file_path = None  # 임시 파일 경로
         self.is_modified = False  # 수정 상태
+        
+        # 정렬 설정
+        self.sort_by = "name"  # name, size, difficulty, date
+        self.sort_order = "asc"  # asc, desc
+        
+        # 아이콘 크기 설정
+        self.icon_scale = 100  # 기본 100%
+        
         self.setup_temp_file()
         self.setup_ui()
         self.apply_dark_mode()
@@ -1226,6 +1491,78 @@ class DeckEditorWindow(QMainWindow):
         self.save_as_action.triggered.connect(self.save_deck_as)
         file_menu.addAction(self.save_as_action)
         
+        # 보기 메뉴
+        view_menu = menubar.addMenu("보기")
+        
+        # 정렬 서브메뉴
+        sort_menu = view_menu.addMenu("정렬")
+        
+        # 정렬 기준
+        self.sort_name_action = QAction("이름 순으로 정렬 ✔", self)
+        self.sort_name_action.triggered.connect(lambda: self.set_sort_by("name"))
+        sort_menu.addAction(self.sort_name_action)
+        
+        self.sort_size_action = QAction("크기 순으로 정렬", self)
+        self.sort_size_action.triggered.connect(lambda: self.set_sort_by("size"))
+        sort_menu.addAction(self.sort_size_action)
+        
+        self.sort_difficulty_action = QAction("난이도 순으로 정렬", self)
+        self.sort_difficulty_action.triggered.connect(lambda: self.set_sort_by("difficulty"))
+        sort_menu.addAction(self.sort_difficulty_action)
+        
+        self.sort_date_action = QAction("날짜 순으로 정렬", self)
+        self.sort_date_action.triggered.connect(lambda: self.set_sort_by("date"))
+        sort_menu.addAction(self.sort_date_action)
+        
+        sort_menu.addSeparator()
+        
+        # 정렬 순서
+        self.sort_asc_action = QAction("오름차순 ✔", self)
+        self.sort_asc_action.triggered.connect(lambda: self.set_sort_order("asc"))
+        sort_menu.addAction(self.sort_asc_action)
+        
+        self.sort_desc_action = QAction("내림차순", self)
+        self.sort_desc_action.triggered.connect(lambda: self.set_sort_order("desc"))
+        sort_menu.addAction(self.sort_desc_action)
+        
+        # 기본값 설정 (이름 순, 오름차순) - 이제 checkable이 없으므로 삭제
+        # self.sort_name_action.setChecked(True)
+        # self.sort_asc_action.setChecked(True)
+        
+        # 아이콘 크기 서브메뉴
+        icon_size_menu = view_menu.addMenu("아이콘 크기")
+        
+        self.icon_50_action = QAction("50%", self)
+        self.icon_50_action.triggered.connect(lambda: self.set_icon_scale(50))
+        icon_size_menu.addAction(self.icon_50_action)
+        
+        self.icon_75_action = QAction("75%", self)
+        self.icon_75_action.triggered.connect(lambda: self.set_icon_scale(75))
+        icon_size_menu.addAction(self.icon_75_action)
+        
+        self.icon_100_action = QAction("100% ✔", self)
+        self.icon_100_action.triggered.connect(lambda: self.set_icon_scale(100))
+        icon_size_menu.addAction(self.icon_100_action)
+        
+        self.icon_125_action = QAction("125%", self)
+        self.icon_125_action.triggered.connect(lambda: self.set_icon_scale(125))
+        icon_size_menu.addAction(self.icon_125_action)
+        
+        self.icon_150_action = QAction("150%", self)
+        self.icon_150_action.triggered.connect(lambda: self.set_icon_scale(150))
+        icon_size_menu.addAction(self.icon_150_action)
+        
+        self.icon_200_action = QAction("200%", self)
+        self.icon_200_action.triggered.connect(lambda: self.set_icon_scale(200))
+        icon_size_menu.addAction(self.icon_200_action)
+        
+        self.icon_custom_action = QAction("사용자 정의", self)
+        self.icon_custom_action.triggered.connect(self.set_custom_icon_scale)
+        icon_size_menu.addAction(self.icon_custom_action)
+        
+        # 기본값 설정 (100%) - checkable이 없으므로 삭제
+        # self.icon_100_action.setChecked(True)
+        
         # 중앙 위젯
         central = QWidget()
         self.setCentralWidget(central)
@@ -1245,23 +1582,22 @@ class DeckEditorWindow(QMainWindow):
         delete_btn.clicked.connect(self.delete_selected_images)
         button_layout.addWidget(delete_btn)
         
-        self.checkbox_btn = QCheckBox("체크박스 표시")
-        self.checkbox_btn.stateChanged.connect(self.toggle_checkboxes)
-        button_layout.addWidget(self.checkbox_btn)
         button_layout.addStretch()
         
         left_layout.addLayout(button_layout)
         
-        self.image_list = QListWidget()
-        self.image_list.setIconSize(QSize(100, 120))
-        self.image_list.setGridSize(QSize(120, 160))  # 아이콘 + 텍스트 공간
+        self.image_list = DeckListWidget()
+        self.image_list.setIconSize(QSize(DECK_ICON_WIDTH, DECK_ICON_HEIGHT))
+        self.image_list.setGridSize(QSize(DECK_GRID_WIDTH, DECK_GRID_HEIGHT))
         self.image_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.image_list.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self.image_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self.image_list.setSpacing(3)
+        self.image_list.setMovement(QListWidget.Movement.Static)  # Static으로 롤백
+        self.image_list.setFlow(QListWidget.Flow.LeftToRight)
+        self.image_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)  # 드래그로 다중 선택 가능
+        self.image_list.setSpacing(DECK_SPACING)
         self.image_list.setWordWrap(True)
         self.image_list.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.image_list.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        self.image_list.setTextElideMode(Qt.TextElideMode.ElideMiddle)  # 긴 파일명 중간 ...  처리
         self.image_list.setStyleSheet("""
             QListWidget::item {
                 text-align: center;
@@ -1277,16 +1613,14 @@ class DeckEditorWindow(QMainWindow):
                 outline: none;
             }
         """)
-        # 드래그로 순서 변경 활성화
-        self.image_list.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.image_list.model().rowsMoved.connect(self.on_items_reordered)
         # 클릭 이벤트 (크로키 목록 표시)
         self.image_list.itemClicked.connect(self.on_deck_item_clicked)
+        # 더블클릭 이벤트 (난이도 변경)
+        self.image_list.itemDoubleClicked.connect(self.on_deck_item_double_clicked)
+        # 컨텍스트 메뉴 (난이도 변경)
+        self.image_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.image_list.customContextMenuRequested.connect(self.show_image_context_menu)
         left_layout.addWidget(self.image_list)
-        
-        # 드래그 앤 드롭 활성화
-        self.image_list.setDragEnabled(True)
-        self.setAcceptDrops(True)
         
         layout.addWidget(left_widget, 2)
         
@@ -1303,11 +1637,14 @@ class DeckEditorWindow(QMainWindow):
         
         # 크로키 목록 리스트
         self.croquis_list = QListWidget()
-        self.croquis_list.setIconSize(QSize(100, 120))
-        self.croquis_list.setGridSize(QSize(120, 160))
+        self.croquis_list.setIconSize(QSize(DECK_ICON_WIDTH, DECK_ICON_HEIGHT))
+        self.croquis_list.setGridSize(QSize(DECK_GRID_WIDTH, DECK_GRID_HEIGHT))
         self.croquis_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.croquis_list.setResizeMode(QListWidget.ResizeMode.Adjust)
-        self.croquis_list.setSpacing(5)
+        self.croquis_list.setMovement(QListWidget.Movement.Static)  # Static으로 일관성 유지
+        self.croquis_list.setFlow(QListWidget.Flow.LeftToRight)
+        self.croquis_list.setSpacing(DECK_SPACING)
+        self.croquis_list.setWordWrap(True)  # 텍스트 줄바꿈 허용
         self.croquis_list.setStyleSheet("""
             QListWidget::item {
                 text-align: center;
@@ -1356,7 +1693,7 @@ class DeckEditorWindow(QMainWindow):
             import re
             # img src 패턴 찾기
             img_patterns = [
-                r'<img[^>]+src=["\']([^"\' ]+)["\']',
+                r'<img[^>]+src=["\']([^"\']+)["\']',
                 r'https?://[^\s<>"\']+(\.(jpg|jpeg|png|gif|bmp|webp))',
             ]
             for pattern in img_patterns:
@@ -1408,21 +1745,25 @@ class DeckEditorWindow(QMainWindow):
                             if matches:
                                 # 가장 큰 이미지 URL 사용
                                 image_url = matches[0].replace('\\/', '/')
-                                url = image_url
-                                break
+                                logger.info(f"핀터레스트에서 이미지 URL 추출: {image_url}")
+                                # 추출한 URL로 재귀 호출
+                                self.download_image_from_url(image_url)
+                                return
                 except Exception as e:
+                    logger.error(f"핀터레스트 이미지 추출 실패: {e}")
                     print(f"핀터레스트 이미지 추출 실패: {e}")
                     QMessageBox.warning(self, "경고", "핀터레스트 이미지를 추출할 수 없습니다. 이미지를 우클릭하여 '이미지 주소 복사'로 직접 이미지 URL을 드래그해주세요.")
                     return
             
             # 이미지 다운로드
+            logger.info(f"URL에서 이미지 다운로드: {url}")
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             req = urllib.request.Request(url, headers=headers)
             
             with urllib.request.urlopen(req, timeout=10) as response:
                 image_data = response.read()
                 
-                # 임시 파일로 저장
+                # 파일명 생성
                 parsed_url = urlparse(url)
                 filename = os.path.basename(unquote(parsed_url.path))
                 
@@ -1430,25 +1771,42 @@ class DeckEditorWindow(QMainWindow):
                 if not filename or '.' not in filename:
                     filename = f"downloaded_{hash(url) % 100000}.jpg"
                 
-                # 덱 폴더에 저장
-                deck_folder = Path(__file__).parent / "deck_images"
-                deck_folder.mkdir(exist_ok=True)
+                # 메모리에서 직접 처리
+                pixmap = QPixmap()
+                pixmap.loadFromData(image_data)
                 
-                save_path = deck_folder / filename
-                counter = 1
-                while save_path.exists():
-                    name, ext = os.path.splitext(filename)
-                    save_path = deck_folder / f"{name}_{counter}{ext}"
-                    counter += 1
+                if pixmap.isNull():
+                    QMessageBox.warning(self, "경고", "올바른 이미지 파일이 아닙니다.")
+                    return
                 
-                with open(save_path, 'wb') as f:
-                    f.write(image_data)
+                # 이미지를 바이트로 변환
+                from PyQt6.QtCore import QBuffer, QIODevice
+                buffer = QBuffer()
+                buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+                pixmap.save(buffer, "PNG")
+                image_bytes = buffer.data().data()
+                
+                # 이미지 정보 딕셔너리 생성
+                image_data_dict = {
+                    "filename": filename,
+                    "original_path": url,  # URL을 원본 경로로 저장
+                    "width": pixmap.width(),
+                    "height": pixmap.height(),
+                    "size": len(image_bytes),
+                    "image_data": base64.b64encode(image_bytes).decode(),
+                    "difficulty": 1,
+                    "tags": []
+                }
                 
                 # 덱에 추가
-                self.add_image_to_deck(str(save_path))
-                # 팝업 제거 - 자동으로 추가됨
+                self.deck_images.append(image_data_dict)
+                logger.info(f"덱에 이미지 추가: {filename}")
+                self.save_temp_file()
+                self.update_image_list()
+                self.mark_modified()
                 
         except Exception as e:
+            logger.error(f"URL 이미지 다운로드 실패: {e}")
             QMessageBox.warning(self, "오류", f"이미지를 다운로드하는 중 오류가 발생했습니다:\n{str(e)}")
                 
     def add_image_to_deck(self, path: str, difficulty: int = 1):
@@ -1482,7 +1840,8 @@ class DeckEditorWindow(QMainWindow):
                 "height": pixmap.height(),
                 "size": len(image_bytes),
                 "image_data": base64.b64encode(image_bytes).decode(),
-                "difficulty": difficulty
+                "difficulty": difficulty,
+                "tags": []  # 태그 필드 추가
             }
             
             self.deck_images.append(image_data)
@@ -1493,61 +1852,147 @@ class DeckEditorWindow(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "오류", f"이미지 추가 실패: {str(e)}")
     
+    def create_thumbnail_with_difficulty(self, img_data: dict) -> QPixmap:
+        """난이도 오버레이가 포함된 썸네일 생성"""
+        # 이미지 데이터에서 픽스맵 생성
+        image_bytes = base64.b64decode(img_data["image_data"])
+        pixmap = QPixmap()
+        pixmap.loadFromData(image_bytes)
+        
+        # 크기 계산
+        icon_width = int(DECK_ICON_WIDTH * self.icon_scale / 100)
+        icon_height = int(DECK_ICON_HEIGHT * self.icon_scale / 100)
+        
+        # 썸네일 생성 (KeepAspectRatio로 비율 유지)
+        scaled_thumb = pixmap.scaled(
+            icon_width, 
+            icon_height, 
+            Qt.AspectRatioMode.KeepAspectRatio, 
+            Qt.TransformationMode.SmoothTransformation
+        )
+        
+        # 캔버스에 중앙 정렬
+        thumbnail = QPixmap(icon_width, icon_height)
+        thumbnail.fill(Qt.GlobalColor.transparent)
+        thumb_painter = QPainter(thumbnail)
+        thumb_x = (icon_width - scaled_thumb.width()) // 2
+        thumb_y = (icon_height - scaled_thumb.height()) // 2
+        thumb_painter.drawPixmap(thumb_x, thumb_y, scaled_thumb)
+        
+        # 난이도 오버레이 추가 (우측 하단) - 크기 비율 적용
+        difficulty = img_data.get("difficulty", 1)
+        colors = ["#FFD700", "#FFA500", "#FF8C00", "#FF4500", "#FF0000"]
+        star_color = colors[difficulty - 1] if 1 <= difficulty <= 5 else "#FFD700"
+        
+        # 오버레이 크기도 스케일에 맞춰 조정
+        overlay_width = int(32 * self.icon_scale / 100)
+        overlay_height = int(18 * self.icon_scale / 100)
+        overlay_offset_x = int(35 * self.icon_scale / 100)
+        overlay_offset_y = int(20 * self.icon_scale / 100)
+        font_size = max(8, int(10 * self.icon_scale / 100))
+        
+        # 반투명 검은 배경
+        bg_rect = QRect(icon_width - overlay_offset_x, icon_height - overlay_offset_y, overlay_width, overlay_height)
+        thumb_painter.setBrush(QBrush(QColor(0, 0, 0, 150)))
+        thumb_painter.setPen(Qt.PenStyle.NoPen)
+        thumb_painter.drawRoundedRect(bg_rect, 8, 8)
+        
+        # 난이도 숫자 (흰색)
+        thumb_painter.setPen(QColor(255, 255, 255))
+        thumb_painter.setFont(QFont("Arial", font_size, QFont.Weight.Bold))
+        thumb_painter.drawText(icon_width - int(32 * self.icon_scale / 100), icon_height - int(6 * self.icon_scale / 100), str(difficulty))
+        
+        # 별 표시 (색상)
+        thumb_painter.setPen(QColor(star_color))
+        thumb_painter.setFont(QFont("Arial", font_size, QFont.Weight.Bold))
+        thumb_painter.drawText(icon_width - int(20 * self.icon_scale / 100), icon_height - int(6 * self.icon_scale / 100), "★")
+        
+        thumb_painter.end()
+        return thumbnail
+    
     def update_image_list(self):
         """이미지 리스트 UI 업데이트"""
         self.image_list.clear()
         
         for idx, img_data in enumerate(self.deck_images):
             try:
+                # 크기 계산
+                icon_width = int(DECK_ICON_WIDTH * self.icon_scale / 100)
+                icon_height = int(DECK_ICON_HEIGHT * self.icon_scale / 100)
+                grid_width = int(DECK_GRID_WIDTH * self.icon_scale / 100)
+                grid_height = int(DECK_GRID_HEIGHT * self.icon_scale / 100)
+                
                 # 이미지 데이터에서 픽스맵 생성
                 image_bytes = base64.b64decode(img_data["image_data"])
                 pixmap = QPixmap()
                 pixmap.loadFromData(image_bytes)
                 
-                # 100x120 범위 내에서 가로 또는 세로 중 하나가 꽉 차도록 스케일링
-                img_ratio = pixmap.width() / pixmap.height()
-                box_ratio = 100 / 120
+                # 썸네일 생성 (KeepAspectRatio로 비율 유지)
+                scaled_thumb = pixmap.scaled(
+                    icon_width, 
+                    icon_height, 
+                    Qt.AspectRatioMode.KeepAspectRatio, 
+                    Qt.TransformationMode.SmoothTransformation
+                )
                 
-                if img_ratio > box_ratio:
-                    # 이미지가 더 넓음 → 가로를 100으로 고정
-                    scaled_pixmap = pixmap.scaledToWidth(100, Qt.TransformationMode.SmoothTransformation)
-                else:
-                    # 이미지가 더 높음 → 세로를 120으로 고정
-                    scaled_pixmap = pixmap.scaledToHeight(120, Qt.TransformationMode.SmoothTransformation)
+                # 캔버스에 중앙 정렬
+                thumbnail = QPixmap(icon_width, icon_height)
+                thumbnail.fill(Qt.GlobalColor.transparent)
+                thumb_painter = QPainter(thumbnail)
+                thumb_x = (icon_width - scaled_thumb.width()) // 2
+                thumb_y = (icon_height - scaled_thumb.height()) // 2
+                thumb_painter.drawPixmap(thumb_x, thumb_y, scaled_thumb)
                 
-                # 100x120 캔버스에 중앙 정렬 (잘라내기)
-                canvas = QPixmap(100, 120)
-                canvas.fill(Qt.GlobalColor.transparent)
+                # 난이도 오버레이 추가 (우측 하단) - 크기 비율 적용
+                difficulty = img_data.get("difficulty", 1)
+                colors = ["#FFD700", "#FFA500", "#FF8C00", "#FF4500", "#FF0000"]
+                star_color = colors[difficulty - 1] if 1 <= difficulty <= 5 else "#FFD700"
                 
-                painter = QPainter(canvas)
-                x = (100 - scaled_pixmap.width()) // 2
-                y = (120 - scaled_pixmap.height()) // 2
+                # 오버레이 크기도 스케일에 맞춰 조정
+                overlay_width = int(32 * self.icon_scale / 100)
+                overlay_height = int(18 * self.icon_scale / 100)
+                overlay_offset_x = int(35 * self.icon_scale / 100)
+                overlay_offset_y = int(20 * self.icon_scale / 100)
+                font_size = max(8, int(10 * self.icon_scale / 100))
                 
-                # 클리핑 영역 설정
-                from PyQt6.QtCore import QRect
-                source_x = max(0, -x)
-                source_y = max(0, -y)
-                source_w = min(scaled_pixmap.width() - source_x, 100)
-                source_h = min(scaled_pixmap.height() - source_y, 120)
+                # 반투명 검은 배경
+                bg_rect = QRect(icon_width - overlay_offset_x, icon_height - overlay_offset_y, overlay_width, overlay_height)
+                thumb_painter.setBrush(QBrush(QColor(0, 0, 0, 150)))
+                thumb_painter.setPen(Qt.PenStyle.NoPen)
+                thumb_painter.drawRoundedRect(bg_rect, 8, 8)
                 
-                target_x = max(0, x)
-                target_y = max(0, y)
+                # 난이도 숫자 (흰색)
+                thumb_painter.setPen(QColor(255, 255, 255))
+                thumb_painter.setFont(QFont("Arial", font_size, QFont.Weight.Bold))
+                thumb_painter.drawText(icon_width - int(32 * self.icon_scale / 100), icon_height - int(6 * self.icon_scale / 100), str(difficulty))
                 
-                painter.drawPixmap(target_x, target_y, scaled_pixmap, source_x, source_y, source_w, source_h)
-                painter.end()
+                # 별 표시 (색상)
+                thumb_painter.setPen(QColor(star_color))
+                thumb_painter.setFont(QFont("Arial", font_size, QFont.Weight.Bold))
+                thumb_painter.drawText(icon_width - int(20 * self.icon_scale / 100), icon_height - int(6 * self.icon_scale / 100), "★")
+                
+                thumb_painter.end()
                 
                 # 리스트 아이템 생성
                 item = QListWidgetItem()
-                item.setSizeHint(QSize(120, 160))  # 아이콘 + 텍스트 + 여백
+                item.setIcon(QIcon(thumbnail))
+                item.setSizeHint(QSize(grid_width, grid_height))
+                
+                # 파일명 표시
+                filename = img_data.get("filename", "")
+                item.setText(f"{filename}")
+                
+                # 툴팁에 난이도 및 태그 표시
+                tooltip = f"난이도: {difficulty} {'★' * difficulty}"
+                tags = img_data.get("tags", [])
+                if tags:
+                    tooltip += f"\n태그: {', '.join(tags)}"
+                item.setToolTip(tooltip)
                 
                 # 이미지 데이터를 UserRole에 저장
                 item.setData(Qt.ItemDataRole.UserRole, img_data)
                 
                 self.image_list.addItem(item)
-                
-                # 커스텀 위젯 생성 및 설정
-                widget = DeckItemWidget(canvas, img_data, self)
-                self.image_list.setItemWidget(item, widget)
                 
             except Exception as e:
                 print(f"이미지 로드 실패: {e}")
@@ -1721,32 +2166,6 @@ class DeckEditorWindow(QMainWindow):
         self.save_temp_file()
         self.mark_modified()
     
-    def toggle_checkboxes(self, state: int):
-        """체크박스 표시/숨김"""
-        # PyQt6의 QListWidget은 기본적으로 체크박스를 지원하지 않으므로
-        # 선택 모드를 활용합니다
-        if state == Qt.CheckState.Checked.value:
-            self.image_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
-        else:
-            self.image_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-    
-    def on_items_reordered(self):
-        """아이템 순서 변경 시"""
-        logger.info("이미지 순서 변경")
-        # deck_images 리스트를 새로운 순서로 업데이트
-        new_order = []
-        for i in range(self.image_list.count()):
-            item = self.image_list.item(i)
-            img_data = item.data(Qt.ItemDataRole.UserRole)
-            if img_data and isinstance(img_data, dict):
-                new_order.append(img_data)
-        
-        self.deck_images = new_order
-        
-        # temp 파일 저장
-        self.save_temp_file()
-        self.mark_modified()
-    
     def on_deck_item_clicked(self, item: QListWidgetItem):
         """덱 아이템 클릭 시 크로키 목록 표시"""
         img_data = item.data(Qt.ItemDataRole.UserRole)
@@ -1761,6 +2180,207 @@ class DeckEditorWindow(QMainWindow):
         filename = img_data.get("filename", "")
         if filename:
             self.load_croquis_for_image(filename)
+    
+    def on_deck_item_double_clicked(self, item: QListWidgetItem):
+        """덱 아이템 더블클릭 시 난이도 변경"""
+        self.cycle_item_difficulty(item)
+    
+    def show_image_context_menu(self, position):
+        """이미지 리스트 컨텍스트 메뉴"""
+        item = self.image_list.itemAt(position)
+        if not item:
+            return
+        
+        menu = QMenu(self)
+        
+        # 이름 바꾸기
+        rename_action = menu.addAction("이름 바꾸기")
+        rename_action.triggered.connect(lambda: self.rename_image(item))
+        
+        # 난이도 설정 메뉴
+        difficulty_menu = menu.addMenu("난이도 설정")
+        for i in range(1, 6):
+            action = difficulty_menu.addAction(f"★{i}")
+            action.triggered.connect(lambda checked, d=i, it=item: self.set_item_difficulty(it, d))
+        
+        # 태그 설정하기
+        tag_action = menu.addAction("태그 설정하기")
+        tag_action.triggered.connect(lambda: self.set_image_tags(item))
+        
+        # 속성
+        props_action = menu.addAction("속성")
+        props_action.triggered.connect(lambda: self.show_image_properties(item))
+        
+        menu.exec(self.image_list.mapToGlobal(position))
+    
+    def paste_image_from_clipboard(self):
+        """클립보드에서 이미지 붙여넣기"""
+        from PyQt6.QtWidgets import QApplication
+        clipboard = QApplication.clipboard()
+        
+        # URL 텍스트 확인
+        text = clipboard.text()
+        if text and (text.startswith('http://') or text.startswith('https://')):
+            # 핀터레스트 핀 URL 처리
+            if 'pinterest.com/pin/' in text:
+                logger.info(f"핀터레스트 핀 URL 복사 감지: {text}")
+                self.download_image_from_url(text)
+            elif any(ext in text.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']):
+                # 일반 이미지 URL
+                self.download_image_from_url(text)
+            else:
+                QMessageBox.information(self, "안내", "이미지 URL을 복사해주세요.\n핀터레스트 핀 URL도 지원합니다.")
+            return
+        
+        # 이미지 확인
+        mime_data = clipboard.mimeData()
+        if mime_data.hasImage():
+            from PyQt6.QtGui import QImage
+            image = clipboard.image()
+            if not image.isNull():
+                # 이미지를 메모리에서 처리
+                pixmap = QPixmap.fromImage(image)
+                
+                # 파일명 생성
+                import time
+                filename = f"clipboard_{int(time.time())}.png"
+                
+                # 이미지를 바이트로 변환
+                from PyQt6.QtCore import QBuffer, QIODevice
+                buffer = QBuffer()
+                buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+                pixmap.save(buffer, "PNG")
+                image_bytes = buffer.data().data()
+                
+                # 이미지 정보 딕셔너리 생성
+                image_data_dict = {
+                    "filename": filename,
+                    "original_path": "클립보드",
+                    "width": pixmap.width(),
+                    "height": pixmap.height(),
+                    "size": len(image_bytes),
+                    "image_data": base64.b64encode(image_bytes).decode(),
+                    "difficulty": 1,
+                    "tags": []
+                }
+                
+                # 덱에 추가
+                self.deck_images.append(image_data_dict)
+                logger.info(f"덱에 이미지 추가: {filename}")
+                self.save_temp_file()
+                self.update_image_list()
+                self.mark_modified()
+            return
+        
+        QMessageBox.information(self, "안내", "클립보드에 이미지나 URL이 없습니다.")
+    
+    def cycle_item_difficulty(self, item: QListWidgetItem):
+        """아이템 난이도 순환 (1→2→3→4→5→1)"""
+        img_data = item.data(Qt.ItemDataRole.UserRole)
+        if not img_data:
+            return
+        
+        current = img_data.get("difficulty", 1)
+        new_difficulty = (current % 5) + 1
+        self.set_item_difficulty(item, new_difficulty)
+    
+    def set_item_difficulty(self, item: QListWidgetItem, difficulty: int):
+        """아이템 난이도 설정"""
+        img_data = item.data(Qt.ItemDataRole.UserRole)
+        if not img_data:
+            return
+        
+        img_data["difficulty"] = difficulty
+        logger.info(f"난이도 변경: {img_data['filename']} -> {difficulty}")
+        
+        # deck_images 업데이트
+        filename = img_data["filename"]
+        for i, deck_img in enumerate(self.deck_images):
+            if deck_img.get("filename") == filename:
+                self.deck_images[i]["difficulty"] = difficulty
+                break
+        
+        # 썸네일 재생성 (난이도 오버레이 포함)
+        thumbnail = self.create_thumbnail_with_difficulty(img_data)
+        item.setIcon(QIcon(thumbnail))
+        
+        # 툴팅 업데이트
+        item.setToolTip(f"난이도: {difficulty} {'★' * difficulty}")
+        item.setData(Qt.ItemDataRole.UserRole, img_data)
+        
+        self.save_temp_file()
+        self.mark_modified()
+    
+    def rename_image(self, item: QListWidgetItem):
+        """이미지 이름 바꾸기"""
+        img_data = item.data(Qt.ItemDataRole.UserRole)
+        if not img_data:
+            return
+        
+        current_name = img_data.get("filename", "")
+        
+        dialog = ImageRenameDialog(current_name, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_name = dialog.get_new_name()
+            if new_name and new_name != current_name:
+                # 이름 변경
+                img_data["filename"] = new_name
+                logger.info(f"파일명 변경: {current_name} -> {new_name}")
+                
+                # deck_images 업데이트
+                for i, deck_img in enumerate(self.deck_images):
+                    if deck_img.get("filename") == current_name:
+                        self.deck_images[i]["filename"] = new_name
+                        break
+                
+                # 아이템 텍스트 업데이트
+                item.setText(new_name)
+                item.setData(Qt.ItemDataRole.UserRole, img_data)
+                
+                self.save_temp_file()
+                self.mark_modified()
+    
+    def set_image_tags(self, item: QListWidgetItem):
+        """이미지 태그 설정"""
+        img_data = item.data(Qt.ItemDataRole.UserRole)
+        if not img_data:
+            return
+        
+        current_tags = img_data.get("tags", [])
+        
+        dialog = ImageTagDialog(current_tags, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            new_tags = dialog.get_tags()
+            
+            # 태그 업데이트
+            img_data["tags"] = new_tags
+            logger.info(f"태그 변경: {img_data['filename']} -> {new_tags}")
+            
+            # deck_images 업데이트
+            filename = img_data["filename"]
+            for i, deck_img in enumerate(self.deck_images):
+                if deck_img.get("filename") == filename:
+                    self.deck_images[i]["tags"] = new_tags
+                    break
+            
+            # 툴팁 업데이트
+            tooltip = f"난이도: {img_data.get('difficulty', 1)} {'★' * img_data.get('difficulty', 1)}"
+            if new_tags:
+                tooltip += f"\n태그: {', '.join(new_tags)}"
+            item.setToolTip(tooltip)
+            item.setData(Qt.ItemDataRole.UserRole, img_data)
+            
+            self.save_temp_file()
+            self.mark_modified()
+    
+    def show_image_properties(self, item: QListWidgetItem):
+        """이미지 속성 표시"""
+        img_data = item.data(Qt.ItemDataRole.UserRole)
+        if not img_data:
+            return
+        
+        dialog = ImagePropertiesDialog(img_data, self)
+        dialog.exec()
     
     def update_title(self):
         """창 제목 업데이트"""
@@ -1780,6 +2400,123 @@ class DeckEditorWindow(QMainWindow):
         # Save As 메뉴 활성화 상태 관리
         # 파일이 없어도 이미지가 있으면 Save As 가능
         self.save_as_action.setEnabled(len(self.deck_images) > 0)
+    
+    def set_sort_by(self, sort_by: str):
+        """정렬 기준 변경"""
+        self.sort_by = sort_by
+        
+        # 텍스트 업데이트
+        self.sort_name_action.setText("이름 순으로 정렬 ✔" if sort_by == "name" else "이름 순으로 정렬")
+        self.sort_size_action.setText("크기 순으로 정렬 ✔" if sort_by == "size" else "크기 순으로 정렬")
+        self.sort_difficulty_action.setText("난이도 순으로 정렬 ✔" if sort_by == "difficulty" else "난이도 순으로 정렬")
+        self.sort_date_action.setText("날짜 순으로 정렬 ✔" if sort_by == "date" else "날짜 순으로 정렬")
+        
+        # 정렬 적용
+        self.apply_sort()
+    
+    def set_sort_order(self, order: str):
+        """정렬 순서 변경"""
+        self.sort_order = order
+        
+        # 텍스트 업데이트
+        self.sort_asc_action.setText("오름차순 ✔" if order == "asc" else "오름차순")
+        self.sort_desc_action.setText("내림차순 ✔" if order == "desc" else "내림차순")
+        
+        # 정렬 적용
+        self.apply_sort()
+    
+    def apply_sort(self):
+        """정렬 적용"""
+        if not self.deck_images:
+            return
+        
+        # 정렬 키 함수
+        if self.sort_by == "name":
+            key_func = lambda x: x.get("filename", "").lower()
+        elif self.sort_by == "size":
+            key_func = lambda x: x.get("size", 0)
+        elif self.sort_by == "difficulty":
+            key_func = lambda x: x.get("difficulty", 1)
+        elif self.sort_by == "date":
+            # 원본 경로의 수정 날짜를 기준으로 정렬
+            # 파일이 없으면 0을 반환
+            def get_mtime(img_data):
+                path = img_data.get("original_path", "")
+                if path and os.path.exists(path):
+                    return os.path.getmtime(path)
+                return 0
+            key_func = get_mtime
+        else:
+            key_func = lambda x: x.get("filename", "").lower()
+        
+        # 정렬
+        reverse = (self.sort_order == "desc")
+        self.deck_images.sort(key=key_func, reverse=reverse)
+        
+        # UI 업데이트
+        self.update_image_list()
+        self.save_temp_file()
+    
+    def set_icon_scale(self, scale: int):
+        """아이콘 크기 변경"""
+        self.icon_scale = scale
+        
+        # 텍스트 업데이트
+        self.icon_50_action.setText("50% ✔" if scale == 50 else "50%")
+        self.icon_75_action.setText("75% ✔" if scale == 75 else "75%")
+        self.icon_100_action.setText("100% ✔" if scale == 100 else "100%")
+        self.icon_125_action.setText("125% ✔" if scale == 125 else "125%")
+        self.icon_150_action.setText("150% ✔" if scale == 150 else "150%")
+        self.icon_200_action.setText("200% ✔" if scale == 200 else "200%")
+        # 사용자 정의 메뉴의 체크 표시도 초기화
+        self.icon_custom_action.setText("사용자 정의")
+        
+        # 아이콘 크기 적용
+        self.apply_icon_scale()
+    
+    def set_custom_icon_scale(self):
+        """사용자 정의 아이콘 크기"""
+        from PyQt6.QtWidgets import QInputDialog
+        
+        scale, ok = QInputDialog.getInt(
+            self, 
+            "사용자 정의 크기", 
+            "아이콘 크기 (%)를 입력하세요:",
+            self.icon_scale,
+            50,
+            200,
+            1
+        )
+        
+        if ok:
+            self.icon_scale = scale
+            # 모든 메뉴의 체크 표시 제거
+            self.icon_50_action.setText("50%")
+            self.icon_75_action.setText("75%")
+            self.icon_100_action.setText("100%")
+            self.icon_125_action.setText("125%")
+            self.icon_150_action.setText("150%")
+            self.icon_200_action.setText("200%")
+            # 사용자 정의 메뉴에 체크 표시 추가
+            self.icon_custom_action.setText(f"사용자 정의 ({scale}%) ✔")
+            
+            # 아이콘 크기 적용
+            self.apply_icon_scale()
+    
+    def apply_icon_scale(self):
+        """아이콘 크기 적용"""
+        # 크기 계산
+        icon_width = int(DECK_ICON_WIDTH * self.icon_scale / 100)
+        icon_height = int(DECK_ICON_HEIGHT * self.icon_scale / 100)
+        grid_width = int(DECK_GRID_WIDTH * self.icon_scale / 100)
+        grid_height = int(DECK_GRID_HEIGHT * self.icon_scale / 100)
+        
+        # image_list에 적용
+        self.image_list.setIconSize(QSize(icon_width, icon_height))
+        self.image_list.setGridSize(QSize(grid_width, grid_height))
+        
+        # UI 업데이트 (썸네일 재생성 필요)
+        self.update_image_list()
     
     def mark_modified(self):
         """수정 상태로 표시"""
@@ -1855,19 +2592,25 @@ class DeckEditorWindow(QMainWindow):
                         # 리스트 아이템 생성
                         list_item = QListWidgetItem()
                         list_item.setIcon(QIcon(thumbnail))
+                        list_item.setSizeHint(QSize(DECK_GRID_WIDTH, DECK_GRID_HEIGHT))
                         
                         # 타임스탬프와 시간 정보
                         timestamp = data.get("timestamp", "")
                         croquis_time = data.get("croquis_time", 0)
                         time_str = f"{croquis_time // 60}:{croquis_time % 60:02d}" if croquis_time > 0 else "N/A"
                         
-                        # 날짜 포맷팅
+                        # 날짜 포맷팅 (연도-월-일 시:분 형식)
                         if len(timestamp) >= 13:
-                            date_str = f"{timestamp[4:6]}/{timestamp[6:8]} {timestamp[9:11]}:{timestamp[11:13]}"
+                            year = timestamp[:4]
+                            month = timestamp[4:6]
+                            day = timestamp[6:8]
+                            hour = timestamp[9:11]
+                            minute = timestamp[11:13]
+                            date_str = f"{year}-{month}-{day}\n{hour}:{minute}"
                         else:
                             date_str = timestamp
                         
-                        list_item.setText(f"{date_str}\\n{time_str}")
+                        list_item.setText(date_str)
                         
                         # 원본 이미지 로드
                         original_bytes = base64.b64decode(data["original"])
@@ -2123,13 +2866,15 @@ class HistoryWindow(QDialog):
         
         # 히스토리 리스트 (덱 편집창과 동일한 스타일)
         self.history_list = QListWidget()
-        self.history_list.setIconSize(QSize(300, 150))
-        self.history_list.setGridSize(QSize(320, 185))  # 아이콘 + 텍스트 공간
+        self.history_list.setIconSize(QSize(HISTORY_ICON_WIDTH, HISTORY_ICON_HEIGHT))
+        self.history_list.setGridSize(QSize(HISTORY_GRID_WIDTH, HISTORY_GRID_HEIGHT))
         self.history_list.setViewMode(QListWidget.ViewMode.IconMode)
         self.history_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.history_list.setMovement(QListWidget.Movement.Static)  # Static으로 일관성 유지
+        self.history_list.setFlow(QListWidget.Flow.LeftToRight)
         self.history_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         self.history_list.setWordWrap(True)
-        self.history_list.setSpacing(5)
+        self.history_list.setSpacing(HISTORY_SPACING)
         
         # 다크/라이트 모드에 따른 텍스트 색상 설정
         text_color = "#ffffff" if self.dark_mode else "#000000"
@@ -2424,7 +3169,6 @@ class CroquisMemoDialog(QDialog):
     def __init__(self, croquis_file_path: str, lang: str = "ko", parent=None):
         super().__init__(parent)
         self.croquis_file_path = croquis_file_path
-        self.memo_file_path = croquis_file_path.replace(".croq", "_memo.txt")
         self.lang = lang
         self.setup_ui()
         self.load_memo()
@@ -2450,11 +3194,18 @@ class CroquisMemoDialog(QDialog):
     
     def load_memo(self):
         """메모 불러오기"""
-        if os.path.exists(self.memo_file_path):
+        if os.path.exists(self.croquis_file_path):
             try:
-                with open(self.memo_file_path, 'r', encoding='utf-8') as f:
-                    memo_text = f.read()
-                    self.memo_edit.setPlainText(memo_text)
+                with open(self.croquis_file_path, "rb") as f:
+                    encrypted = f.read()
+                
+                key = base64.urlsafe_b64encode(hashlib.sha256(b"croquis_secret_key").digest())
+                fernet = Fernet(key)
+                decrypted = fernet.decrypt(encrypted)
+                data = json.loads(decrypted.decode())
+                
+                memo_text = data.get("memo", "")
+                self.memo_edit.setPlainText(memo_text)
             except Exception as e:
                 logger.error(f"메모 불러오기 실패: {e}")
     
@@ -2462,8 +3213,24 @@ class CroquisMemoDialog(QDialog):
         """메모 저장 후 닫기"""
         try:
             memo_text = self.memo_edit.toPlainText()
-            with open(self.memo_file_path, 'w', encoding='utf-8') as f:
-                f.write(memo_text)
+            
+            # 기존 croq 파일 읽기
+            with open(self.croquis_file_path, "rb") as f:
+                encrypted = f.read()
+            
+            key = base64.urlsafe_b64encode(hashlib.sha256(b"croquis_secret_key").digest())
+            fernet = Fernet(key)
+            decrypted = fernet.decrypt(encrypted)
+            data = json.loads(decrypted.decode())
+            
+            # 메모 업데이트
+            data["memo"] = memo_text
+            
+            # 다시 암호화하여 저장
+            encrypted_new = fernet.encrypt(json.dumps(data).encode())
+            with open(self.croquis_file_path, "wb") as f:
+                f.write(encrypted_new)
+            
             logger.info(f"크로키 메모 저장: {os.path.basename(self.croquis_file_path)}")
             self.accept()
         except Exception as e:
@@ -2473,11 +3240,17 @@ class CroquisMemoDialog(QDialog):
     @staticmethod
     def get_memo(croquis_file_path: str) -> str:
         """메모 텍스트 가져오기 (툴팁용)"""
-        memo_file_path = croquis_file_path.replace(".croq", "_memo.txt")
-        if os.path.exists(memo_file_path):
+        if os.path.exists(croquis_file_path):
             try:
-                with open(memo_file_path, 'r', encoding='utf-8') as f:
-                    return f.read().strip()
+                with open(croquis_file_path, "rb") as f:
+                    encrypted = f.read()
+                
+                key = base64.urlsafe_b64encode(hashlib.sha256(b"croquis_secret_key").digest())
+                fernet = Fernet(key)
+                decrypted = fernet.decrypt(encrypted)
+                data = json.loads(decrypted.decode())
+                
+                return data.get("memo", "").strip()
             except:
                 return ""
         return ""
@@ -2916,6 +3689,164 @@ class AlarmEditDialog(QDialog):
         return data
 
 
+# ============== 태그 필터링 다이얼로그 ==============
+class TagFilterDialog(QDialog):
+    """태그 필터링 다이얼로그"""
+    
+    def __init__(self, deck_path: str, parent=None):
+        super().__init__(parent)
+        self.deck_path = deck_path
+        self.all_tags: List[str] = []
+        self.tag_checkboxes: Dict[str, QCheckBox] = {}
+        self.deck_images: List[Dict[str, Any]] = []
+        self.enabled_tags: set = set()  # 활성화된 태그
+        
+        self.setWindowTitle("태그 설정")
+        self.resize(400, 500)
+        
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 15, 20)
+        layout.setSpacing(12)
+        
+        # 안내 레이블
+        info_label = QLabel("🏷️ 크로키에 포함할 태그를 선택하세요\n체크 해제한 태그의 그림은 크로키에서 제외됩니다.")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # 로딩 중 표시
+        self.loading_label = QLabel("태그를 불러오는 중...")
+        self.loading_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.loading_label)
+        
+        # 스크롤 영역 (태그 목록)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll_widget = QWidget()
+        self.tags_layout = QVBoxLayout(scroll_widget)
+        self.tags_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.tags_layout.setContentsMargins(10, 10, 10, 10)  # 스크롤 내부 마진 증가
+        scroll.setWidget(scroll_widget)
+        scroll.hide()  # 처음에는 숨김
+        self.scroll_area = scroll
+        layout.addWidget(scroll, 1)
+        
+        # 선택된 그림 수 표시
+        self.count_label = QLabel()
+        self.count_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.count_label.setStyleSheet("font-weight: bold; padding: 10px;")
+        layout.addWidget(self.count_label)
+        
+        # 버튼
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        # 비동기로 태그 로드
+        QTimer.singleShot(0, self.load_tags_async)
+    
+    def load_tags_async(self):
+        """비동기로 태그 목록 로드"""
+        try:
+            # 덱 파일 로드
+            if not self.deck_path or not os.path.exists(self.deck_path):
+                self.loading_label.setText("덱 파일을 찾을 수 없습니다.")
+                return
+            
+            with open(self.deck_path, "rb") as f:
+                encrypted = f.read()
+            
+            data = decrypt_data(encrypted)
+            self.deck_images = data.get("images", [])
+            
+            # 모든 태그 수집 (중복 제거)
+            tags_set = set()
+            for img in self.deck_images:
+                tags = img.get("tags", [])
+                if tags:
+                    tags_set.update(tags)
+            
+            # 태그를 이름 순으로 정렬
+            self.all_tags = sorted(list(tags_set))
+            
+            # 모든 태그를 활성화 상태로 초기화
+            self.enabled_tags = set(self.all_tags)
+            
+            # UI 업데이트
+            self.update_tags_ui()
+            
+        except Exception as e:
+            self.loading_label.setText(f"태그 로드 실패: {str(e)}")
+            logger.error(f"태그 로드 실패: {e}")
+    
+    def update_tags_ui(self):
+        """태그 UI 업데이트"""
+        # 로딩 레이블 숨기고 스크롤 영역 표시
+        self.loading_label.hide()
+        self.scroll_area.show()
+        
+        # 기존 체크박스 제거
+        for i in reversed(range(self.tags_layout.count())):
+            self.tags_layout.itemAt(i).widget().setParent(None)
+        
+        self.tag_checkboxes.clear()
+        
+        if not self.all_tags:
+            no_tags_label = QLabel("이 덱에는 태그가 없습니다.")
+            no_tags_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            no_tags_label.setStyleSheet("color: gray; padding: 20px;")
+            self.tags_layout.addWidget(no_tags_label)
+        else:
+            # 태그별 체크박스 생성
+            for tag in self.all_tags:
+                cb = QCheckBox(tag)
+                cb.setChecked(tag in self.enabled_tags)
+                cb.stateChanged.connect(self.on_tag_changed)
+                self.tag_checkboxes[tag] = cb
+                self.tags_layout.addWidget(cb)
+        
+        # 그림 수 업데이트
+        self.update_count()
+    
+    def on_tag_changed(self):
+        """태그 체크박스 상태 변경 시"""
+        # 활성화된 태그 업데이트
+        self.enabled_tags.clear()
+        for tag, cb in self.tag_checkboxes.items():
+            if cb.isChecked():
+                self.enabled_tags.add(tag)
+        
+        # 그림 수 업데이트
+        self.update_count()
+    
+    def update_count(self):
+        """선택된 그림 수 업데이트"""
+        count = self.get_filtered_count()
+        total = len(self.deck_images)
+        self.count_label.setText(f"선택된 그림: {count} / {total}")
+    
+    def get_filtered_count(self) -> int:
+        """필터링된 그림 수 반환"""
+        count = 0
+        for img in self.deck_images:
+            tags = img.get("tags", [])
+            
+            # 태그가 없는 그림은 무조건 포함
+            if not tags:
+                count += 1
+                continue
+            
+            # 활성화된 태그 중 하나라도 있으면 포함
+            if any(tag in self.enabled_tags for tag in tags):
+                count += 1
+        
+        return count
+    
+    def get_enabled_tags(self) -> set:
+        """활성화된 태그 반환"""
+        return self.enabled_tags.copy()
+
+
 # ============== 메인 윈도우 ==============
 class MainWindow(QMainWindow):
     """크로키 연습 앱 메인 윈도우"""
@@ -2925,6 +3856,7 @@ class MainWindow(QMainWindow):
         self.settings = CroquisSettings()
         self.load_settings()
         self.image_files: List[str] = []
+        self.enabled_tags: set = set()  # 활성화된 태그
         self.setup_ui()
         self.apply_language()
         self.apply_dark_mode()
@@ -2973,17 +3905,22 @@ class MainWindow(QMainWindow):
         basic_layout = QVBoxLayout(basic_group)
         
         folder_layout = QHBoxLayout()
-        self.folder_label = QLabel()
+        self.deck_label = QLabel()
         self.folder_value = QLineEdit()
         self.folder_value.setReadOnly(True)
-        self.folder_value.setPlaceholderText("deck")
-        folder_layout.addWidget(self.folder_label)
+        self.folder_value.setPlaceholderText("덱이 선택되지 않았습니다.")
+        folder_layout.addWidget(self.deck_label)
         folder_layout.addWidget(self.folder_value, 1)
         basic_layout.addLayout(folder_layout)
         
-        self.select_folder_btn = QPushButton()
-        self.select_folder_btn.clicked.connect(self.select_folder)
-        basic_layout.addWidget(self.select_folder_btn)
+        self.select_deck_btn = QPushButton()
+        self.select_deck_btn.clicked.connect(self.select_folder)
+        basic_layout.addWidget(self.select_deck_btn)
+        
+        self.tag_filter_btn = QPushButton("태그 설정")
+        self.tag_filter_btn.clicked.connect(self.show_tag_filter_dialog)
+        self.tag_filter_btn.setEnabled(False)  # 초기에는 비활성화
+        basic_layout.addWidget(self.tag_filter_btn)
         
         left_column.addWidget(basic_group)
         
@@ -3016,12 +3953,6 @@ class MainWindow(QMainWindow):
         height_layout.addWidget(self.height_label)
         height_layout.addWidget(self.height_input)
         image_layout.addLayout(height_layout)
-        
-        self.random_check = QCheckBox()
-        self.random_check.setChecked(self.settings.random_order)
-        self.random_check.setMinimumHeight(25)
-        self.random_check.stateChanged.connect(self.on_random_changed)
-        image_layout.addWidget(self.random_check)
         
         self.grayscale_check = QCheckBox()
         self.grayscale_check.setChecked(self.settings.grayscale)
@@ -3160,14 +4091,13 @@ class MainWindow(QMainWindow):
         
         # 기본 설정
         self.basic_group.setTitle(tr("basic_settings", lang))
-        self.folder_label.setText(tr("image_folder", lang))
-        self.select_folder_btn.setText(tr("select_folder", lang))
+        self.deck_label.setText(tr("croquis_deck", lang))
+        self.select_deck_btn.setText(tr("select_deck", lang))
         
         # 이미지 설정
         self.image_group.setTitle(tr("image_settings", lang))
         self.width_label.setText(tr("image_width", lang))
         self.height_label.setText(tr("image_height", lang))
-        self.random_check.setText(tr("random_order", lang))
         self.grayscale_check.setText(tr("grayscale", lang))
         self.flip_check.setText(tr("flip_horizontal", lang))
         
@@ -3326,6 +4256,16 @@ class MainWindow(QMainWindow):
             # 새로운 형식 (dict) 또는 구버전 형식 (str) 처리
             for img in images_data:
                 if isinstance(img, dict):
+                    # 태그 필터링 적용
+                    img_tags = img.get("tags", [])
+                    
+                    # 태그가 없는 이미지는 항상 포함
+                    if not img_tags:
+                        pass  # 포함
+                    # 활성화된 태그가 설정되어 있고, 이미지 태그 중 활성화된 태그가 없으면 제외
+                    elif self.enabled_tags and not any(tag in self.enabled_tags for tag in img_tags):
+                        continue  # 제외
+                    
                     # 새로운 형식: dict에서 image_data 추출
                     try:
                         image_data_b64 = img.get("image_data", "")
@@ -3346,11 +4286,16 @@ class MainWindow(QMainWindow):
                 self.settings.image_folder = file_path
                 self.folder_value.setText(f"{os.path.basename(file_path)} ({len(self.image_files)}개 이미지)")
                 self.start_btn.setEnabled(True)
+                self.tag_filter_btn.setEnabled(True)  # 태그 설정 버튼 활성화
                 self.save_settings()
             else:
                 QMessageBox.warning(self, "경고", "덱 파일에 유효한 이미지가 없습니다.")
         except Exception as e:
             QMessageBox.warning(self, "오류", f"덱 파일을 불러오는 중 오류가 발생했습니다: {str(e)}")
+    
+    def load_images_from_deck(self, deck_path: str):
+        """덱에서 이미지 다시 로드 (태그 필터링 적용)"""
+        self.load_deck_file(deck_path)
             
     def load_images_from_folder(self, folder: str):
         """폴더에서 이미지 로드 (구버전 호환)"""
@@ -3376,11 +4321,6 @@ class MainWindow(QMainWindow):
     def on_height_changed(self, value: int):
         self.settings.image_height = value
         logger.info(f"이미지 높이 변경: {value}")
-        self.save_settings()
-        
-    def on_random_changed(self, state: int):
-        self.settings.random_order = state == Qt.CheckState.Checked.value
-        logger.info(f"랜덤 모드: {self.settings.random_order}")
         self.save_settings()
         
     def on_grayscale_changed(self, state: int):
@@ -3432,7 +4372,24 @@ class MainWindow(QMainWindow):
         self.settings.study_mode = state == Qt.CheckState.Checked.value
         self.time_input.setEnabled(not self.settings.study_mode)
         self.save_settings()
+    
+    def show_tag_filter_dialog(self):
+        """태그 필터링 다이얼로그 표시"""
+        # 덱 경로 확인
+        deck_path = self.settings.image_folder
+        if not deck_path or not os.path.exists(deck_path):
+            QMessageBox.warning(self, "경고", "먼저 덱 파일을 선택해주세요.")
+            return
         
+        # 다이얼로그 표시
+        dialog = TagFilterDialog(deck_path, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.enabled_tags = dialog.get_enabled_tags()
+            logger.info(f"활성화된 태그: {self.enabled_tags}")
+            
+            # 이미지 파일 목록 다시 로드 (태그 필터링 적용)
+            self.load_images_from_deck(deck_path)
+    
     def start_croquis(self):
         """크로키 시작"""
         if not self.image_files:
@@ -3505,14 +4462,16 @@ class MainWindow(QMainWindow):
             "screenshot": base64.b64encode(shot_bytes).decode(),
             "timestamp": timestamp,
             "croquis_time": croquis_time,
-            "image_metadata": image_metadata
+            "image_metadata": image_metadata,
+            "memo": ""  # 기본 빈 메모
         }
         
         encrypted = fernet.encrypt(json.dumps(data).encode())
         
         # 파일명에 원본 이미지 이름 포함
         filename = f"{timestamp}_{image_filename}.croq"
-        with open(pairs_dir / filename, "wb") as f:
+        croq_path = pairs_dir / filename
+        with open(croq_path, "wb") as f:
             f.write(encrypted)
             
         self.heatmap_widget.add_croquis(1)
