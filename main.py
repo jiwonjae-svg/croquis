@@ -50,92 +50,83 @@ from PyQt6.QtGui import (
 )
 
 # ============== Alarm Check Functions ==============
+def get_icon_path():
+    """Get the icon file path for toast notifications.
+    For compiled executables, icon.ico is bundled into _MEIPASS."""
+    if getattr(sys, 'frozen', False):
+        # Compiled executable: icon is in _MEIPASS
+        if hasattr(sys, '_MEIPASS'):
+            icon_path = Path(sys._MEIPASS) / "icon.ico"
+        else:
+            icon_path = Path(sys.executable).parent / "icon.ico"
+    else:
+        # Script mode: icon is in script directory
+        icon_path = Path(__file__).parent / "icon.ico"
+    
+    return str(icon_path) if icon_path.exists() else None
+
 def show_toast_notification(title: str, message: str, icon_path: str = None):
-    """Windows 토스트 알림 표시"""
-    dat_dir = get_data_path() / "dat"
-    log_file = dat_dir / "toast.log"
-    
-    def toast_log(msg):
-        try:
-            with open(log_file, "a", encoding="utf-8") as f:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                f.write(f"[{timestamp}] {msg}\n")
-        except:
-            pass
-    
-    toast_log(f"Toast requested: {title} - {message}")
-    
-    # 아이콘 경로 설정
+    """Display Windows toast notification"""
+    # Set icon path
     if icon_path is None:
-        icon_path = str(get_data_path() / "icon.ico")
+        icon_path = get_icon_path()
     
-    # 1순위: win11toast (Windows 10/11 네이티브 알림)
+    icon_exists = icon_path and os.path.exists(icon_path)
+    logger.info(LOG_MESSAGES["toast_notification_requested"].format(title, message, icon_path))
+    logger.info(f"Icon exists: {icon_exists}")
+    
+    # Priority 1: win11toast (Windows 10/11 native notifications)
     try:
         from win11toast import toast_async
         import asyncio
         
         async def show_toast():
-            # 타임아웃 5초 설정
+            # 5 second timeout
             try:
                 await asyncio.wait_for(
                     toast_async(
                         title,
                         message,
-                        icon=icon_path if os.path.exists(icon_path) else None,
+                        icon=icon_path if icon_exists else None,
                         app_id="Croquis Practice"
                     ),
                     timeout=5.0
                 )
             except asyncio.TimeoutError:
-                toast_log("win11toast: timeout after 5s")
+                logger.warning(LOG_MESSAGES["toast_notification_timeout"])
         
         asyncio.run(show_toast())
-        toast_log("win11toast: SUCCESS")
+        logger.info(LOG_MESSAGES["toast_notification_success"].format("win11toast"))
         return
     except Exception as e:
-        toast_log(f"win11toast failed: {e}")
+        logger.error(LOG_MESSAGES["toast_notification_failed"].format("win11toast", e))
     
-    # 2순위: plyer (크로스 플랫폼)
+    # Priority 2: plyer (cross-platform)
     try:
         from plyer import notification
         notification.notify(
             title=title,
             message=message,
             app_name="Croquis Practice",
-            app_icon=icon_path if icon_path and os.path.exists(icon_path) else None,
+            app_icon=icon_path if icon_exists else None,
             timeout=10
         )
-        toast_log("plyer: SUCCESS")
+        logger.info(LOG_MESSAGES["toast_notification_success"].format("plyer"))
         return
     except Exception as e:
-        toast_log(f"plyer failed: {e}")
+        logger.error(LOG_MESSAGES["toast_notification_failed"].format("plyer", e))
     
-    # 최후의 수단: 콘솔 출력 + 파일 기록
+    # Last resort: console output
     fallback_msg = f"[ALARM] {title}: {message}"
     print(fallback_msg)
-    toast_log(f"Fallback: {fallback_msg}")
+    logger.info(LOG_MESSAGES["toast_notification_fallback"].format(fallback_msg))
 
 def check_and_trigger_alarms():
-    """알람 확인 및 실행 (한 번만 울리도록 중복 방지)"""
+    """Check and trigger alarms (prevent duplicates)"""
     dat_dir = get_data_path() / "dat"
     alarms_file = dat_dir / "alarms.dat"
-    triggered_file = dat_dir / "triggered_alarms.json"
-    
-    # 로그 파일 생성 (디버깅용)
-    log_file = dat_dir / "alarm_check.log"
-    
-    def log_message(msg):
-        try:
-            with open(log_file, "a", encoding="utf-8") as f:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                f.write(f"[{timestamp}] {msg}\n")
-        except:
-            pass
-    
-    log_message("=== Alarm check started ===")
     
     if not alarms_file.exists():
-        log_message(f"Alarms file not found: {alarms_file}")
         return
     
     try:
@@ -143,58 +134,32 @@ def check_and_trigger_alarms():
             encrypted = f.read()
         data = decrypt_data(encrypted)
         alarms = data.get("alarms", [])
-        log_message(f"Loaded {len(alarms)} alarms")
         
-        # 이미 울린 알람 기록 로드
-        triggered_alarms = {}
-        if triggered_file.exists():
-            try:
-                with open(triggered_file, "r", encoding="utf-8") as f:
-                    triggered_alarms = json.load(f)
-                log_message(f"Loaded {len(triggered_alarms)} triggered records")
-            except:
-                triggered_alarms = {}
+        if not alarms:
+            return
         
-        # 현재 시간
+        logger.info(LOG_MESSAGES["alarm_checking"].format(len(alarms)))
+        
+        # Current time
         now = datetime.now()
         current_time = now.strftime("%H:%M")
         current_date = now.strftime("%Y-%m-%d")
-        current_datetime = f"{current_date} {current_time}"
         current_weekday = now.weekday()
-        icon_path = str(get_data_path() / "icon.ico")
+        icon_path = get_icon_path()
         
-        log_message(f"Current time: {current_datetime}, weekday: {current_weekday}")
-        
-        # 날짜가 바뀌면 기록 초기화
-        for key in list(triggered_alarms.keys()):
-            if not key.startswith(current_date):
-                del triggered_alarms[key]
-        
-        # 알람 확인
-        triggered_now = False
+        # Check alarms
         for i, alarm in enumerate(alarms):
             if not alarm.get("enabled", False):
-                log_message(f"Alarm {i}: disabled")
                 continue
             
             alarm_time = alarm.get("time", "")
             alarm_type = alarm.get("type", "")
-            log_message(f"Alarm {i}: time={alarm_time}, type={alarm_type}")
             
-            # 시간 매칭 확인
+            # Check time match
             if alarm_time != current_time:
-                log_message(f"Alarm {i}: time not matched ({alarm_time} != {current_time})")
                 continue
             
-            # 고유 키 생성 (날짜 + 시간 + 알람 인덱스)
-            alarm_key = f"{current_date}_{current_time}_{i}"
-            
-            # 이미 울린 알람은 건너뛰기
-            if alarm_key in triggered_alarms:
-                log_message(f"Alarm {i}: already triggered ({alarm_key})")
-                continue
-            
-            # 타입별 확인
+            # Check by type
             should_trigger = False
             
             if alarm_type == "weekday":
@@ -207,28 +172,13 @@ def check_and_trigger_alarms():
                     should_trigger = True
             
             if should_trigger:
-                title = alarm.get("title", "크로키 알람")
-                message = alarm.get("message", "크로키 연습 시간입니다!")
-                log_message(f"Alarm {i}: TRIGGERED! Title: {title}, Message: {message}")
+                title = alarm.get("title", "Croquis Alarm")
+                message = alarm.get("message", "Time to practice croquis!")
+                logger.info(LOG_MESSAGES["alarm_triggered"].format(title, current_time))
                 show_toast_notification(title, message, icon_path)
                 
-                # 울린 알람 기록
-                triggered_alarms[alarm_key] = current_datetime
-                triggered_now = True
-            else:
-                log_message(f"Alarm {i}: conditions not met")
-        
-        # 기록 저장
-        if triggered_now:
-            with open(triggered_file, "w", encoding="utf-8") as f:
-                json.dump(triggered_alarms, f, ensure_ascii=False, indent=2)
-            log_message("Triggered alarms saved")
-        else:
-            log_message("No alarms triggered")
-                
     except Exception as e:
-        log_message(f"ERROR: {e}")
-        print(f"Error checking alarms: {e}")
+        logger.error(LOG_MESSAGES["alarm_check_failed"].format(e))
 
 # ============== Size constants ==============
 # Deck editor list item sizes
@@ -273,8 +223,16 @@ def setup_logging():
     
     return logging.getLogger('Croquis')
 
-logger = setup_logging()
-logger.info(LOG_MESSAGES["program_started"])
+# --check-alarm 모드에서는 로깅 초기화하지 않음
+if not (len(sys.argv) > 1 and sys.argv[1] == "--check-alarm"):
+    logger = setup_logging()
+    logger.info(LOG_MESSAGES["program_started"])
+else:
+    # 알람 체크 모드: 최소한의 로거만 생성 (파일 로깅 없음)
+    logger = logging.getLogger('Croquis')
+    logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        logger.addHandler(logging.NullHandler())
 
 
 # ============== Translation setup ==============
@@ -3353,8 +3311,6 @@ def setup_alarm_background_service():
         bat_content = f"""@echo off
 title Croquis Alarm Service
 cd /d "{exe_dir}"
-echo Starting Croquis Alarm Service...
-echo Log file: dat\\alarm_check.log
 :loop
 start /b /wait "" "{exe_path}" --check-alarm
 timeout /t 60 /nobreak >nul
@@ -3365,13 +3321,10 @@ goto loop
         with open(bat_path, "w", encoding="cp949") as f:
             f.write(bat_content)
         
-        # VBS 파일 생성 (BAT를 보이지 않게 실행) - 상대 경로 사용
-        vbs_content = '''Set WshShell = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
-currentDir = fso.GetParentFolderName(WScript.ScriptFullName)
-WshShell.Run currentDir & "\\croquis_alarm_service.bat", 0, False
+        # VBS 파일 생성 (BAT를 보이지 않게 실행) - 절대 경로 사용
+        vbs_content = f'''Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run """{bat_path}""", 0, False
 Set WshShell = Nothing
-Set fso = Nothing
 '''
         
         vbs_path = exe_dir / "croquis_alarm_service.vbs"
@@ -3386,11 +3339,11 @@ Set fso = Nothing
         if startup_link.exists():
             startup_link.unlink()
         
-        # VBS 파일을 시작프로그램에 복사
+        # Copy VBS file to startup folder
         import shutil
         shutil.copy2(vbs_path, startup_link)
         
-        logger.info(f"Alarm background service installed to startup folder")
+        logger.info(LOG_MESSAGES["alarm_service_installed"])
         return True
         
     except Exception as e:
@@ -3398,11 +3351,11 @@ Set fso = Nothing
         return False
 
 def remove_alarm_background_service():
-    """BAT 파일 및 시작프로그램 등록 제거"""
+    """Remove BAT file and startup registration"""
     try:
         exe_dir = get_data_path()
         
-        # BAT, VBS, Python 파일 삭제
+        # Delete BAT, VBS, Python files
         bat_path = exe_dir / "croquis_alarm_service.bat"
         vbs_path = exe_dir / "croquis_alarm_service.vbs"
         py_path = exe_dir / "croquis_alarm_background.py"
@@ -3414,14 +3367,14 @@ def remove_alarm_background_service():
         if py_path.exists():
             py_path.unlink()
         
-        # 시작프로그램에서 제거
+        # Remove from startup folder
         startup_folder = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
         startup_link = startup_folder / "Croquis_Alarm.vbs"
         
         if startup_link.exists():
             startup_link.unlink()
         
-        logger.info("Alarm background service removed")
+        logger.info(LOG_MESSAGES["alarm_service_removed"])
         return True
         
     except Exception as e:

@@ -15,6 +15,20 @@ LOG_MESSAGES = {
     "croquis_window_closed": "Croquis window closed",
     "croquis_started": "Croquis started with {} images",
     
+    # Alarm operations
+    "alarm_settings_opened": "Alarm settings opened",
+    "alarm_settings_closed": "Alarm settings closed",
+    "alarm_service_installed": "Alarm background service installed to startup folder",
+    "alarm_service_removed": "Alarm background service removed",
+    "alarm_checking": "Checking {} alarm(s)",
+    "alarm_triggered": "Alarm triggered: {} at {}",
+    "alarm_check_failed": "Failed to check alarms: {}",
+    "toast_notification_requested": "Toast notification: {} - {}, icon: {}",
+    "toast_notification_success": "Toast notification shown successfully ({})",
+    "toast_notification_failed": "Toast notification failed ({}): {}",
+    "toast_notification_timeout": "Toast notification timeout after 5s",
+    "toast_notification_fallback": "Toast fallback: {}",
+    
     # Deck operations
     "deck_created": "New deck created",
     "deck_loaded": "Deck loaded",
@@ -63,10 +77,6 @@ LOG_MESSAGES = {
     # History
     "history_opened": "Croquis history opened",
     "history_closed": "Croquis history closed",
-    
-    # Alarm
-    "alarm_settings_opened": "Alarm settings opened",
-    "alarm_settings_closed": "Alarm settings closed",
     
     # Memo
     "memo_dialog_opened": "Croquis memo dialog opened: {}",
