@@ -2642,10 +2642,10 @@ class DeckEditorWindow(QMainWindow):
                 f.write(image_bytes)
             
             logger.info(f"Image exported: {filename} -> {file_path}")
-            QMessageBox.information(self, tr("success", self.lang), f"{tr("export_success", self.lang)}:\n{file_path}")
+            QMessageBox.information(self, tr("success", self.lang), f"{tr('export_success', self.lang)}:\n{file_path}")
         except Exception as e:
             logger.error(f"Image export failed: {e}")
-            QMessageBox.warning(self, tr("error", self.lang), f"{tr("export_failed", self.lang)}:\n{str(e)}")
+            QMessageBox.warning(self, tr("error", self.lang), f"{tr('export_failed', self.lang)}:\n{str(e)}")
     
     def cycle_item_difficulty(self, item: QListWidgetItem):
         """Cycle item difficulty (1→2→3→4→5→1)"""
@@ -2827,7 +2827,7 @@ class DeckEditorWindow(QMainWindow):
             filename = os.path.basename(self.current_deck_path)
             title += f" - {filename}"
         else:
-            title += f" - {tr("no_title", self.lang)}"
+            title += f" - {tr('no_title', self.lang)}"
         
         if self.is_modified:
             title += " *"
@@ -4825,14 +4825,14 @@ class MainWindow(QMainWindow):
             
             if self.image_files:
                 self.settings.image_folder = file_path
-                self.folder_value.setText(f"{os.path.basename(file_path)} ({len(self.image_files)} {tr("images_count", self.lang)})")
+                self.folder_value.setText(f"{os.path.basename(file_path)} ({len(self.image_files)} {tr('images_count', self.lang)})")
                 self.start_btn.setEnabled(True)
                 self.tag_filter_btn.setEnabled(True)  # Enable tag filter button
                 self.save_settings()
             else:
                 QMessageBox.warning(self, tr("warning", self.lang), tr("deck_no_valid_images", self.lang))
         except Exception as e:
-            QMessageBox.warning(self, tr("error", self.lang), f"{tr("deck_file_load_error", self.lang)}: {str(e)}")
+            QMessageBox.warning(self, tr("error", self.lang), f"{tr('deck_file_load_error', self.lang)}: {str(e)}")
     
     def load_images_from_deck(self, deck_path: str):
         """Reload images from deck applying tag filters."""
