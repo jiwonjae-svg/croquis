@@ -1,165 +1,215 @@
-# Croquis - 크로키 연습 프로그램
+# Croquis - Figure Drawing Practice Application
 
-크로키 연습을 위한 데스크톱 애플리케이션입니다. 이미지 덱을 관리하고 타이머를 설정하여 체계적인 드로잉 연습을 할 수 있습니다.
+**Version 1.0.1**
 
-## 주요 기능
+A desktop application for systematic figure drawing practice with timer functionality, deck management, and practice tracking.
 
-- **덱 관리**: 이미지 폴더를 덱으로 등록하고 관리
-- **타이머 기능**: 크로키 시간을 설정하고 자동으로 이미지 전환
-- **다국어 지원**: 한국어/영어 지원
-- **알람 기능**: 설정한 시간에 크로키 연습 알림
-- **연습 히스토리**: 크로키 연습 기록 자동 저장 및 통계 제공
-- **보안**: 사용자별 암호화된 데이터 저장
-- **Qt 리소스 시스템**: `.qrc` 형식으로 버튼 이미지와 번역 파일 관리
+## Features
 
-## Qt Resource System
-## 설치 및 실행
+- **Deck Management**: Organize image folders as practice decks with filtering and shuffle options
+- **Timer System**: Customizable duration per image with automatic transitions
+- **Heatmap Visualization**: GitHub-style contribution graph for tracking daily practice
+- **Screenshot Capture**: Save your work directly within the app
+- **Multi-language Support**: Korean, English, and Japanese
+- **Alarm Notifications**: Schedule practice reminders with Windows integration
+- **Practice History**: Automatic recording and statistics of practice sessions
+- **Security**: Machine ID-based encryption for user-specific data storage
 
-### 요구사항
+## Technology Stack
 
-- Python 3.10 이상
-- Windows 10/11 (알림 기능 지원)
+- **Framework**: PyQt6
+- **Encryption**: cryptography (Fernet with SHA-256 + machine ID-based key derivation)
+- **Notifications**: win11toast, plyer
+- **Build**: PyInstaller
+- **Python**: 3.10+
 
-### 설치
+## Quick Start
+
+### Prerequisites
+
+- Python 3.10 or higher
+- Windows 10/11 (for notification support)
+
+### Installation
 
 ```bash
-# 저장소 클론
+# Clone repository
 git clone <repository-url>
 cd Croquis2
 
-# 의존성 설치
+# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 실행
+### Running
 
 ```bash
-python run.py
+python main.py
 ```
 
-### 빌드 (실행 파일 생성)
+### Building Executable
 
 ```bash
-python scripts/compile_resources.py  # Qt 리소스 컴파일
-pyinstaller Croquis.spec             # 실행 파일 빌드
+# Build with PyInstaller
+pyinstaller Croquis.spec
+
+# Output: dist/Croquis/Croquis.exe
 ```
 
-빌드된 실행 파일은 `dist/Croquis/` 폴더에 생성됩니다.
-
-## 프로젝트 구조
+## Project Structure
 
 ```
 Croquis2/
-├── src/                      # 소스 코드
-│   ├── core/                 # 핵심 기능
-│   │   └── key_manager.py    # 암호화 키 관리
-│   ├── gui/                  # GUI 컴포넌트
-│   │   └── image_viewer.py   # 이미지 뷰어 윈도우
-│   ├── utils/                # 유틸리티
-│   │   ├── language_manager.py    # 다국어 지원
-│   │   ├── log_manager.py         # 로깅 시스템
-│   │   └── qt_resource_loader.py  # Qt 리소스 로더
-│   ├── assets/               # 리소스 파일
-│   │   ├── btn/              # 버튼 이미지
-│   │   ├── icon.ico          # 앱 아이콘
-│   │   ├── resources.qrc     # Qt 리소스 정의
-│   │   └── resources_rc.py   # 컴파일된 리소스
-│   └── main.py               # 메인 애플리케이션
-├── scripts/                  # 빌드 스크립트
-│   ├── compile.py            # 전체 빌드 스크립트
-│   └── compile_resources.py  # Qt 리소스 컴파일
-├── data/                     # 사용자 데이터 (생성됨)
-├── logs/                     # 로그 파일 (생성됨)
-├── run.py                    # 진입점
-├── requirements.txt          # Python 의존성
-└── Croquis.spec             # PyInstaller 설정
+├── src/
+│   ├── core/
+│   │   ├── key_manager.py        # Encryption key management
+│   │   ├── alarm_service.py      # Alarm notification service
+│   │   └── models.py             # Data models
+│   ├── gui/
+│   │   ├── image_viewer_window.py  # Image viewer
+│   │   └── widgets.py            # Reusable widgets (Heatmap, Screenshot)
+│   ├── utils/
+│   │   ├── language_manager.py   # Multi-language support
+│   │   ├── log_manager.py        # Logging system
+│   │   ├── qt_resource_loader.py # Qt resource loader
+│   │   └── helpers.py            # Helper functions
+│   └── assets/
+│       ├── btn/                  # Button images
+│       ├── icon.ico              # Application icon
+│       └── resources_rc.py       # Compiled Qt resources
+├── scripts/
+│   ├── compile.py                # Build script
+│   └── compile_resources.py      # Qt resource compiler
+├── main.py                       # Application entry point
+├── requirements.txt              # Python dependencies
+├── translations.csv              # Translation data (ko/en/ja)
+└── Croquis.spec                 # PyInstaller configuration
 ```
 
-## 보안 기능
+## Security Features
 
-- **동적 암호화 키**: 사용자 환경(PC UUID + OS 사용자명)에 기반한 고유 키 생성
-- **데이터 암호화**: 덱 정보 및 설정이 암호화되어 저장
-- **사용자 격리**: 각 사용자는 자신의 암호화된 데이터에만 접근 가능
+- **Dynamic Encryption Key**: Generated from Machine UUID + OS username + application salt
+- **Data Encryption**: All deck information and settings encrypted at rest using Fernet (AES-128)
+- **Cross-Platform Key Generation**: 
+  - Windows: Registry MachineGuid
+  - macOS: IOPlatformUUID
+  - Linux: /etc/machine-id
+- **User Isolation**: Each user can only access their own encrypted data
+- **Secure Key Derivation**: SHA-256 hashing with zlib compression
 
-## 사용 방법
+## Usage
 
-1. **덱 생성**: 메인 화면에서 '편집' 버튼으로 덱 에디터 열기
-2. **이미지 추가**: 폴더 선택 또는 개별 이미지 추가
-3. **크로키 시작**: 덱 선택 후 시간 설정, '시작' 버튼 클릭
-4. **단축키**:
-   - `Space`: 재생/일시정지
-   - `N`: 다음 이미지
-   - `P`: 이전 이미지
-   - `F11`: 전체화면 토글
-   - `Esc`: 종료
+### Creating a Deck
 
-## Qt 리소스 시스템
+1. Click **Edit Deck** button
+2. Click **Select Folder** to add image directory
+3. Optionally add individual images
+4. Configure shuffle, tag filters
+5. Save deck
 
-### 리소스 컴파일
+### Starting Practice
 
-리소스 파일(버튼 이미지, 번역 파일)을 수정한 경우:
+1. Select deck from dropdown
+2. Set timer duration (seconds)
+3. Optionally enable Study Mode (infinite timer)
+4. Click **Start**
+
+### Keyboard Shortcuts (Viewer)
+
+- `Space`: Next image
+- `S` or `Enter`: Take screenshot
+- `Esc`: Close viewer
+
+### Setting Alarms
+
+1. Click **Alarm** button
+2. Set time and select days
+3. Enable alarm
+4. App will notify at scheduled times
+
+## Data Storage
+
+- **Deck Files**: Encrypted `.deck` files in `deck/` folder
+- **History**: Practice records in `dat/croquis_history.dat`
+- **Settings**: User preferences in `dat/settings.dat`
+- **Screenshots**: Drawing pairs in `croquis_pairs/` folder
+- **Logs**: Daily logs in `logs/` folder
+
+## Development
+
+### Modular Architecture
+
+The codebase follows a clean modular structure:
+
+- **Core**: Business logic (encryption, alarms, models)
+- **GUI**: User interface components (windows, widgets)
+- **Utils**: Shared utilities (logging, translations, helpers)
+
+### Running from Source
 
 ```bash
-python scripts/compile_resources.py
+# Install dependencies
+pip install -r requirements.txt
+
+# Run application
+python main.py
 ```
 
-[resources.qrc](src/assets/resources.qrc)를 읽어 [resources_rc.py](src/assets/resources_rc.py) 모듈을 생성합니다.
+### Building
 
-### 리소스 사용 예제
+```bash
+# Build executable
+pyinstaller Croquis.spec
 
-```python
-from utils.qt_resource_loader import QtResourceLoader
-
-loader = QtResourceLoader()
-
-# 이미지 로드
-pixmap = loader.get_pixmap(":/buttons/정지.png")
-icon = loader.get_icon(":/buttons/재생.png")
-
-# CSV 파일 읽기
-csv_data = loader.read_text_file(":/data/translations.csv")
-
-# 리소스 존재 확인
-if loader.resource_exists(":/buttons/정지.png"):
-    print("리소스 존재!")
+# Output: dist/Croquis/
 ```
 
-### PyInstaller 배포 시 주의사항
+## Troubleshooting
 
-다음 파일들은 배포 시 포함되지 않아도 됩니다 (모두 `resources_rc.py`에 임베딩됨):
-- `resources.qrc` (소스 정의 파일)
-- `compile_resources.py` (빌드 도구)
-- `btn/` 폴더의 버튼 이미지들
-- `translations.csv`
+### Icon Not Showing
+- Verify `src/assets/icon.ico` exists
+- Rebuild: `pyinstaller Croquis.spec`
 
-## 기술 스택
+### Translations Not Loading
+- Ensure `translations.csv` is in project root
+- Check CSV format: `key,ko,en,ja` header
 
-- **GUI Framework**: PyQt6
-- **암호화**: cryptography (Fernet)
-- **알림**: win11toast, plyer
-- **빌드**: PyInstaller
+### Alarms Not Working
+- Run as administrator for startup registration
+- Check Windows notification permissions in Settings
 
-## 문제 해결
+### Heatmap Not Visible
+- Ensure `dat/croquis_history.dat` exists and is readable
+- Check file permissions
 
-### 알림이 작동하지 않는 경우
-- Windows 11: '알림' 설정에서 앱 알림 권한 확인
-- Windows 10: 'win11toast' 대신 'plyer' 백업 알림 사용
+## System Requirements
 
-### 실행 파일이 바이러스로 탐지되는 경우
-- PyInstaller로 빌드된 실행 파일은 오탐지될 수 있습니다
-- 소스 코드를 직접 실행(`python run.py`)하거나 백신 예외 처리 추가
+- **OS**: Windows 10/11
+- **Python**: 3.10+
+- **RAM**: 512MB minimum
+- **Disk Space**: 200MB (including dependencies)
 
-### 이미지가 로드되지 않는 경우
-- 덱 경로가 유효한지 확인
-- 지원 형식: JPG, PNG, BMP, GIF
+## License
 
-### 버튼 아이콘이 표시되지 않는 경우
-- `python scripts/compile_resources.py`로 Qt 리소스 재컴파일
+This project is provided as-is for educational and personal use.
 
-## 라이선스
+## Changelog
 
-이 프로젝트는 개인 사용 목적으로 제작되었습니다.
+### v1.0.1 (Current)
+- Fixed heatmap visibility and sizing
+- Improved center alignment for heatmap widget
+- Enhanced UI layout for better component visibility
+- Code cleanup and optimization
 
-## 개발자 정보
+### v1.0.0
+- Refactored monolithic codebase into modular architecture
+- Enhanced security with machine ID-based encryption
+- Added heatmap visualization for practice tracking
+- Implemented screenshot capture functionality
+- Multi-language support (Korean/English/Japanese)
+- Improved alarm service with Windows integration
 
-버전: 2.0.0
+## Contributing
+
+Contributions are welcome! Please submit pull requests or open issues for bugs and feature requests.
+

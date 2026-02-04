@@ -12,11 +12,11 @@ from io import StringIO
 def get_base_path():
     """Get base path for resources. Handles PyInstaller bundled executables."""
     if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        return Path(sys._MEIPASS)
+        # Running as compiled executable - use executable directory
+        return Path(sys.executable).parent
     else:
-        # Running as script
-        return Path(__file__).parent
+        # Running as script - go up to project root (2 levels up from src/utils/)
+        return Path(__file__).parent.parent.parent
 
 def load_translations_from_csv(csv_path: str = None) -> dict:
     """Load translations from CSV file into a nested dictionary."""

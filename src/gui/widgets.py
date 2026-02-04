@@ -1,18 +1,37 @@
 """
-GUI Widgets for Croquis Application
+Reusable GUI widgets for Croquis application
 """
 
-import sys
-from pathlib import Path
 from datetime import date, timedelta
-from typing import Dict
+from typing import Dict, Optional
+from pathlib import Path
 
 from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QBrush, QPen, QFont, QMouseEvent, QPaintEvent, QPixmap, QKeyEvent
+from PyQt6.QtCore import Qt, pyqtSignal, QRect, QPoint
+from PyQt6.QtGui import (
+    QPainter, QColor, QBrush, QPen, QFont, QPixmap,
+    QPaintEvent, QMouseEvent, QKeyEvent, QGuiApplication
+)
 
-from utils.common import get_data_path, tr
 from core.key_manager import encrypt_data, decrypt_data
+from utils.language_manager import TRANSLATIONS
+
+
+def tr(key: str, lang: str = "ko") -> str:
+    """Translation helper"""
+    return TRANSLATIONS.get(lang, TRANSLATIONS["ko"]).get(key, key)
+
+
+def get_data_path():
+    """Get base path for data files (dat, logs, croquis_pairs etc.).
+    Returns the project root directory."""
+    import sys
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable - use executable's directory
+        return Path(sys.executable).parent
+    else:
+        # Running as script - use project root (parent of src directory)
+        return Path(__file__).parent.parent.parent
 
 
 class HeatmapWidget(QWidget):
@@ -22,14 +41,13 @@ class HeatmapWidget(QWidget):
         super().__init__(parent)
         self.lang = lang
         self.data: Dict[str, int] = {}
-        self.cell_size = 8
+        self.cell_size = 10
         self.cell_gap = 1
         self.weeks = 53
         self.days = 7
         self.total_count = 0
         self.load_data()
         self.setMinimumHeight(120)
-        self.setMaximumHeight(120)
         self.setMouseTracking(True)
         self.hover_date = None
         self.hover_pos = None
@@ -73,7 +91,7 @@ class HeatmapWidget(QWidget):
     def get_color(self, count: int) -> QColor:
         """Return color based on count"""
         if count == 0:
-            return QColor(235, 237, 240)
+            return QColor(200, 200, 200)  # Darker gray for empty cells
         elif count <= 2:
             return QColor(155, 233, 168)
         elif count <= 5:
@@ -99,7 +117,7 @@ class HeatmapWidget(QWidget):
         painter.setFont(QFont("Arial", 9))
         painter.setPen(QColor(100, 100, 100))
         
-        x_offset = 60
+        x_offset = 10
         y_offset = 20
         
         # Compute start position per month and draw labels
@@ -126,7 +144,7 @@ class HeatmapWidget(QWidget):
                 y = y_offset + day * (self.cell_size + self.cell_gap)
                 
                 painter.setBrush(QBrush(color))
-                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setPen(QPen(QColor(150, 150, 150), 1))  # Add light border
                 painter.drawRoundedRect(x, y, self.cell_size, self.cell_size, 2, 2)
         
         # Draw legend
@@ -255,7 +273,6 @@ class ScreenshotOverlay(QWidget):
         self.end_pos = None
         self.selecting = False
         
-        from PyQt6.QtGui import QGuiApplication, QScreen
         screen = QGuiApplication.primaryScreen()
         self.screenshot = screen.grabWindow(0)
         self.setGeometry(screen.geometry())
@@ -263,8 +280,6 @@ class ScreenshotOverlay(QWidget):
         self.activateWindow()
         
     def paintEvent(self, event: QPaintEvent):
-        from PyQt6.QtCore import QRect
-        
         painter = QPainter(self)
         
         if self.screenshot:
@@ -310,8 +325,6 @@ class ScreenshotOverlay(QWidget):
             self.update()
     
     def mouseReleaseEvent(self, event: QMouseEvent):
-        from PyQt6.QtCore import QRect
-        
         if event.button() == Qt.MouseButton.LeftButton and self.selecting:
             self.selecting = False
             self.end_pos = event.pos()

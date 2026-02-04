@@ -19,45 +19,87 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+*.log
 
 # Virtual Environment
+.env
+.venv
+env/
 venv/
 ENV/
-env/
+env.bak/
+venv.bak/
 
 # IDE
-.vscode/
 .idea/
+.vscode/
+!.vscode/settings.json
 *.swp
 *.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# PyInstaller
+*.manifest
+*.spec.bak
+
+# User data
+dat/
+data/
+logs/
+croquis_pairs/
+deck/
+temp/
+
+# Backup files
+*.bak
+*.old
+*.backup
+*_backup
+*.old_*
+main.py.old_*
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Project specific - User Data
-data/
-dat/
-temp/
-croquis_pairs/
-deck/
-
-# Project specific - Build
-build/
-dist/
-
-# Project specific - Logs
-logs/
-*.log
-
-# Legacy files (root level main.py kept for reference)
-main.py
-
-# Exclude markdown files except README
-*.md
-!README*.md
-!readme*.md
-
-# Exclude specific files
+# Build artifacts
 repomix-output.xml
-translations.csv
+*.pyc
+*.pyo
+
+# Test files
+test_*.py
+*_test.py
+
+logs/
+deck/
+croquis_pairs/
+temp/
+
+# Compiled resources (regenerated on build)
+src/assets/resources_rc.py
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test files
+tests/output/
+*.test.py
+
+# Build artifacts
+repomix-output.xml
+OPTIMIZATION_NOTES.md
+REFACTORING_REPORT.md
+ALARM_SERVICE_GUIDE.md

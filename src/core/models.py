@@ -1,9 +1,9 @@
 """
-Data models for Croquis application
+Data models and settings for Croquis application
 """
 
-from dataclasses import dataclass
-
+from dataclasses import dataclass, asdict
+from typing import Dict, List
 
 @dataclass
 class CroquisSettings:
@@ -28,3 +28,21 @@ class CroquisRecord:
     """Croquis record data class"""
     date: str
     count: int
+
+
+# Size constants for UI elements
+class UIConstants:
+    """UI size and layout constants"""
+    # Deck editor list item sizes
+    DECK_ICON_WIDTH = 100
+    DECK_ICON_HEIGHT = 120
+    DECK_GRID_WIDTH = 120
+    DECK_GRID_HEIGHT = 160
+    DECK_SPACING = 3
+    
+    # History window list item sizes
+    HISTORY_ICON_WIDTH = 300
+    HISTORY_ICON_HEIGHT = 150
+    HISTORY_GRID_WIDTH = 320
+    HISTORY_GRID_HEIGHT = 185
+    HISTORY_SPACING = 5

@@ -1,214 +1,82 @@
 ﻿"""
 Croquis Practice App
 PyQt6-based croquis practice application
+Refactored for maintainability and security
 """
 
 import sys
 import os
 import json
-import random
-import hashlib
+import base64
 import logging
+import tempfile
+import time
+import random
 from datetime import datetime, date, timedelta
 from pathlib import Path
-from typing import Optional, List, Dict, Any
-from dataclasses import dataclass, asdict
-from cryptography.fernet import Fernet
-import base64
+from typing import List, Dict, Any
+from dataclasses import asdict
 
 # Setup Python path for package imports
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
+# Core modules
+from core.models import CroquisSettings, UIConstants
+from core.key_manager import encrypt_data, decrypt_data
+from core.alarm_service import check_and_trigger_alarms
+
+# Utils
+from utils.helpers import get_data_path, tr, get_app_icon
 from utils.log_manager import LOG_MESSAGES
 from utils.language_manager import TRANSLATIONS
 from utils.qt_resource_loader import QtResourceLoader
-from core.key_manager import encrypt_data, decrypt_data  # Use secure key manager
 
-# ============== Path helpers ==============
-def get_data_path():
-    """Get base path for data files (dat, logs, croquis_pairs etc.).
-    Returns the project root directory."""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable - use executable's directory
-        return Path(sys.executable).parent
-    else:
-        # Running as script - use project root (parent of src directory)
-        return Path(__file__).parent.parent
+# GUI modules
+from gui.widgets import HeatmapWidget
+from gui.image_viewer_window import ImageViewerWindow
 
+# Import UI constants for backward compatibility
+DECK_ICON_WIDTH = UIConstants.DECK_ICON_WIDTH
+DECK_ICON_HEIGHT = UIConstants.DECK_ICON_HEIGHT
+DECK_GRID_WIDTH = UIConstants.DECK_GRID_WIDTH
+DECK_GRID_HEIGHT = UIConstants.DECK_GRID_HEIGHT
+DECK_SPACING = UIConstants.DECK_SPACING
+HISTORY_ICON_WIDTH = UIConstants.HISTORY_ICON_WIDTH
+HISTORY_ICON_HEIGHT = UIConstants.HISTORY_ICON_HEIGHT
+HISTORY_GRID_WIDTH = UIConstants.HISTORY_GRID_WIDTH
+HISTORY_GRID_HEIGHT = UIConstants.HISTORY_GRID_HEIGHT
+HISTORY_SPACING = UIConstants.HISTORY_SPACING
+
+# Note: GUI modules already imported from gui.widgets above
+
+# PyQt6 imports
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QGridLayout, QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox,
+    QLabel, QPushButton, QLineEdit, QComboBox, QCheckBox,
     QSpinBox, QGroupBox, QFileDialog, QDialog, QDialogButtonBox,
-    QScrollArea, QFrame, QSplitter, QMenuBar, QMenu, QToolBar,
-    QListWidget, QListWidgetItem, QMessageBox, QSizePolicy, QStackedWidget,
+    QListWidget, QListWidgetItem, QMessageBox,
+    QTimeEdit, QDateEdit, QMenu, QAbstractItemView,
+    QScrollArea, QFrame, QSplitter, QMenuBar, QToolBar,
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QRubberBand,
-    QTimeEdit, QDateEdit, QCalendarWidget, QSystemTrayIcon, QAbstractItemView
+    QCalendarWidget, QSystemTrayIcon, QSizePolicy, QStackedWidget, QTextEdit
 )
 from PyQt6.QtCore import (
     Qt, QTimer, QSize, QRect, QPoint, pyqtSignal, QMimeData, QUrl,
-    QPropertyAnimation, QEasingCurve, QSettings, QTime, QDate, QDateTime
+    QPropertyAnimation, QEasingCurve, QSettings, QTime, QDate, QDateTime, QBuffer, QIODevice
 )
 from PyQt6.QtGui import (
     QPixmap, QImage, QPainter, QColor, QPen, QBrush, QFont, QIcon,
     QIntValidator, QScreen, QGuiApplication, QDragEnterEvent, QDropEvent,
-    QMouseEvent, QPaintEvent, QKeyEvent, QAction, QDrag
+    QMouseEvent, QPaintEvent, QKeyEvent, QAction, QDrag, QTransform
 )
 
-# ============== Alarm Check Functions ==============
-def get_icon_path():
-    """Get the icon file path for toast notifications.
-    For compiled executables, icon.ico is bundled into _MEIPASS."""
-    if getattr(sys, 'frozen', False):
-        # Compiled executable: icon is in _MEIPASS
-        if hasattr(sys, '_MEIPASS'):
-            icon_path = Path(sys._MEIPASS) / "icon.ico"
-        else:
-            icon_path = Path(sys.executable).parent / "icon.ico"
-    else:
-        # Script mode: icon is in src/assets directory
-        icon_path = Path(__file__).parent / "assets" / "icon.ico"
-    
-    return str(icon_path) if icon_path.exists() else None
-
-def show_toast_notification(title: str, message: str, icon_path: str = None):
-    """Display Windows toast notification"""
-    # Set icon path
-    if icon_path is None:
-        icon_path = get_icon_path()
-    
-    icon_exists = icon_path and os.path.exists(icon_path)
-    logger.info(LOG_MESSAGES["toast_notification_requested"].format(title, message, icon_path))
-    logger.info(f"Icon exists: {icon_exists}")
-    
-    # Priority 1: win11toast (Windows 10/11 native notifications)
-    try:
-        from win11toast import toast_async
-        import asyncio
-        
-        async def show_toast():
-            # 5 second timeout
-            try:
-                await asyncio.wait_for(
-                    toast_async(
-                        title,
-                        message,
-                        icon=icon_path if icon_exists else None,
-                        app_id="Croquis"
-                    ),
-                    timeout=5.0
-                )
-            except asyncio.TimeoutError:
-                logger.warning(LOG_MESSAGES["toast_notification_timeout"])
-        
-        asyncio.run(show_toast())
-        logger.info(LOG_MESSAGES["toast_notification_success"].format("win11toast"))
-        return
-    except Exception as e:
-        logger.error(LOG_MESSAGES["toast_notification_failed"].format("win11toast", e))
-    
-    # Priority 2: plyer (cross-platform)
-    try:
-        from plyer import notification
-        notification.notify(
-            title=title,
-            message=message,
-            app_name="Croquis",
-            app_icon=icon_path if icon_exists else None,
-            timeout=10
-        )
-        logger.info(LOG_MESSAGES["toast_notification_success"].format("plyer"))
-        return
-    except Exception as e:
-        logger.error(LOG_MESSAGES["toast_notification_failed"].format("plyer", e))
-    
-    # Last resort: console output
-    fallback_msg = f"[ALARM] {title}: {message}"
-    print(fallback_msg)
-    logger.info(LOG_MESSAGES["toast_notification_fallback"].format(fallback_msg))
-
-def check_and_trigger_alarms():
-    """Check and trigger alarms (prevent duplicates)"""
-    dat_dir = get_data_path() / "dat"
-    alarms_file = dat_dir / "alarms.dat"
-    
-    if not alarms_file.exists():
-        return
-    
-    try:
-        with open(alarms_file, "rb") as f:
-            encrypted = f.read()
-        data = decrypt_data(encrypted)
-        alarms = data.get("alarms", [])
-        
-        if not alarms:
-            return
-        
-        logger.info(LOG_MESSAGES["alarm_checking"].format(len(alarms)))
-        
-        # Current time
-        now = datetime.now()
-        current_time = now.strftime("%H:%M")
-        current_date = now.strftime("%Y-%m-%d")
-        current_weekday = now.weekday()
-        icon_path = get_icon_path()
-        
-        # Check alarms
-        for i, alarm in enumerate(alarms):
-            if not alarm.get("enabled", False):
-                continue
-            
-            alarm_time = alarm.get("time", "")
-            alarm_type = alarm.get("type", "")
-            
-            # Check time match
-            if alarm_time != current_time:
-                continue
-            
-            # Check by type
-            should_trigger = False
-            
-            if alarm_type == "weekday":
-                weekdays = alarm.get("weekdays", [])
-                if current_weekday in weekdays:
-                    should_trigger = True
-            elif alarm_type == "date":
-                alarm_date = alarm.get("date", "")
-                if alarm_date == current_date:
-                    should_trigger = True
-            
-            if should_trigger:
-                title = alarm.get("title", "Croquis Alarm")
-                message = alarm.get("message", "Time to practice croquis!")
-                logger.info(LOG_MESSAGES["alarm_triggered"].format(title, current_time))
-                show_toast_notification(title, message, icon_path)
-                
-    except Exception as e:
-        logger.error(LOG_MESSAGES["alarm_check_failed"].format(e))
-
-# ============== Size constants ==============
-# Deck editor list item sizes
-DECK_ICON_WIDTH = 100
-DECK_ICON_HEIGHT = 120
-DECK_GRID_WIDTH = 120
-DECK_GRID_HEIGHT = 160
-DECK_SPACING = 3
-
-# History window list item sizes
-HISTORY_ICON_WIDTH = 300
-HISTORY_ICON_HEIGHT = 150
-HISTORY_GRID_WIDTH = 320
-HISTORY_GRID_HEIGHT = 185
-HISTORY_SPACING = 5
 
 # ============== Logging setup ==============
 def setup_logging():
     """Initialize logging system"""
-    # Use execution path for logs directory (not script path)
     if getattr(sys, 'frozen', False):
-        # Running as compiled executable - use executable's directory
         base_dir = Path(sys.executable).parent
     else:
-        # Running as script - use script's directory
         base_dir = Path(__file__).parent
     
     log_dir = base_dir / "logs"
@@ -228,1109 +96,60 @@ def setup_logging():
     
     return logging.getLogger('Croquis')
 
-# --check-alarm 모드에서는 로깅 초기화하지 않음
+
+# Initialize logger (skip if in alarm check mode)
 if not (len(sys.argv) > 1 and sys.argv[1] == "--check-alarm"):
     logger = setup_logging()
     logger.info(LOG_MESSAGES["program_started"])
 else:
-    # 알람 체크 모드: 최소한의 로거만 생성 (파일 로깅 없음)
     logger = logging.getLogger('Croquis')
     logger.setLevel(logging.INFO)
     if not logger.handlers:
         logger.addHandler(logging.NullHandler())
 
 
-# ============== Translation setup ==============
-def tr(key: str, lang: str = "ko") -> str:
-    """Translation helper"""
-    return TRANSLATIONS.get(lang, TRANSLATIONS["ko"]).get(key, key)
+# ============== Import remaining large windows ==============
+# These are kept in main.py temporarily - will be refactored later
+# Import statements for DeckEditorWindow, HistoryWindow, AlarmWindow etc.
 
-# ============== Icon setup ==============
-def get_app_icon() -> QIcon:
-    """Load application icon from file (optimized for PyInstaller)"""
-    icon_path = None
-    
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        # PyInstaller extracts files to sys._MEIPASS (temp directory)
-        bundled_icon = Path(sys._MEIPASS) / "icon.ico"
-        if bundled_icon.exists():
-            icon_path = bundled_icon
-        else:
-            # Fallback: check executable directory
-            icon_path = get_data_path() / "icon.ico"
-    else:
-        # Running as script - icon is in src/assets
-        icon_path = Path(__file__).parent / "assets" / "icon.ico"
-    
-    if icon_path and icon_path.exists():
-        return QIcon(str(icon_path))
-    
-    return QIcon()
-
-# ============== Encryption utilities ==============
-# Note: These functions are now deprecated in favor of key_manager module
-# They are kept for backward compatibility during migration
-# ============== Data classes ==============
-@dataclass
-class CroquisSettings:
-    """Croquis settings data class"""
-    image_folder: str = ""
-    image_width: int = 400
-    image_height: int = 700
-    grayscale: bool = False
-    flip_horizontal: bool = False
-    timer_position: str = "bottom_right"
-    timer_font_size: str = "large"
-    time_seconds: int = 5
-    language: str = "ko"
-    dark_mode: bool = False
-    study_mode: bool = False
-    today_croquis_count_position: str = "top_right"
-    today_croquis_count_font_size: str = "medium"
+# ============== Import remaining large windows ==============
+# These are kept in main.py temporarily - will be refactored later
+# Import statements for DeckEditorWindow, HistoryWindow, AlarmWindow etc.
 
 
-@dataclass
-class CroquisRecord:
-    """Croquis record data class"""
-    date: str
-    count: int
-
-# ============== Heatmap widget ==============
-class HeatmapWidget(QWidget):
-    """GitHub-style croquis heatmap widget"""
-    
-    def __init__(self, parent=None, lang: str = "ko"):
-        super().__init__(parent)
-        self.lang = lang
-        self.data: Dict[str, int] = {}
-        self.cell_size = 8
-        self.cell_gap = 1
-        self.weeks = 53
-        self.days = 7
-        self.total_count = 0
-        self.load_data()
-        self.setMinimumHeight(120)
-        self.setMaximumHeight(120)
-        self.setMouseTracking(True)
-        self.hover_date = None
-        self.hover_pos = None
-        
-    def load_data(self):
-        """Load history data"""
-        dat_dir = get_data_path() / "dat"
-        dat_dir.mkdir(exist_ok=True)
-        data_path = dat_dir / "croquis_history.dat"
-        if data_path.exists():
-            try:
-                with open(data_path, "rb") as f:
-                    encrypted = f.read()
-                decrypted = decrypt_data(encrypted)
-                self.data = decrypted
-                self.total_count = sum(self.data.values())
-            except Exception:
-                self.data = {}
-                self.total_count = 0
-        else:
-            self.data = {}
-            self.total_count = 0
-    
-    def save_data(self):
-        """Save history data"""
-        dat_dir = get_data_path() / "dat"
-        dat_dir.mkdir(exist_ok=True)
-        data_path = dat_dir / "croquis_history.dat"
-        encrypted = encrypt_data(self.data)
-        with open(data_path, "wb") as f:
-            f.write(encrypted)
-    
-    def add_croquis(self, count: int = 1):
-        """Increment daily croquis count"""
-        today = date.today().isoformat()
-        self.data[today] = self.data.get(today, 0) + count
-        self.total_count += count
-        self.save_data()
-        self.update()
-    
-    def get_color(self, count: int) -> QColor:
-        """Return color based on count"""
-        if count == 0:
-            return QColor(235, 237, 240)
-        elif count <= 2:
-            return QColor(155, 233, 168)
-        elif count <= 5:
-            return QColor(64, 196, 99)
-        elif count <= 10:
-            return QColor(48, 161, 78)
-        else:
-            return QColor(33, 110, 57)
-    
-    def paintEvent(self, event: QPaintEvent):
-        """Draw the heatmap"""
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Month labels
-        months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", 
-                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        
-        today = date.today()
-        start_date = today - timedelta(days=365)
-        
-        # Draw month labels
-        painter.setFont(QFont("Arial", 9))
-        painter.setPen(QColor(100, 100, 100))
-        
-        x_offset = 60
-        y_offset = 20
-        
-        # Compute start position per month and draw labels
-        current_month = 0
-        for week in range(self.weeks):
-            check_date = start_date + timedelta(weeks=week)
-            if check_date.month != current_month:
-                current_month = check_date.month
-                x = x_offset + week * (self.cell_size + self.cell_gap)
-                painter.drawText(x, y_offset - 8, months[current_month - 1])
-        
-        # Draw heatmap cells
-        for week in range(self.weeks):
-            for day in range(self.days):
-                cell_date = start_date + timedelta(weeks=week, days=day)
-                if cell_date > today:
-                    continue
-                
-                date_str = cell_date.isoformat()
-                count = self.data.get(date_str, 0)
-                color = self.get_color(count)
-                
-                x = x_offset + week * (self.cell_size + self.cell_gap)
-                y = y_offset + day * (self.cell_size + self.cell_gap)
-                
-                painter.setBrush(QBrush(color))
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.drawRoundedRect(x, y, self.cell_size, self.cell_size, 2, 2)
-        
-        # Draw legend
-        legend_x = x_offset
-        legend_y = y_offset + self.days * (self.cell_size + self.cell_gap) + 10
-        
-        painter.setPen(QColor(100, 100, 100))
-        painter.drawText(legend_x, legend_y + 10, tr("less", self.lang))
-        
-        legend_colors = [0, 1, 3, 6, 11]
-        for i, c in enumerate(legend_colors):
-            color = self.get_color(c)
-            painter.setBrush(QBrush(color))
-            painter.setPen(Qt.PenStyle.NoPen)
-            lx = legend_x + 35 + i * (self.cell_size + 2)
-            painter.drawRoundedRect(lx, legend_y, self.cell_size, self.cell_size, 2, 2)
-        
-        painter.setPen(QColor(100, 100, 100))
-        painter.drawText(legend_x + 35 + 5 * (self.cell_size + 2) + 5, legend_y + 10, tr("more", self.lang))
-        
-        # Show hover tooltip
-        if self.hover_date and self.hover_pos:
-            count = self.data.get(self.hover_date, 0)
-            tooltip_text = f"{self.hover_date}: {count} {(tr('croquis_times', self.lang))}"
-            
-            painter.setFont(QFont("Arial", 10))
-            fm = painter.fontMetrics()
-            text_width = fm.horizontalAdvance(tooltip_text)
-            text_height = fm.height()
-            
-            # Tooltip background with bounds adjustment
-            padding = 5
-            tooltip_width = text_width + padding * 2
-            tooltip_height = text_height + padding * 2
-            
-            tooltip_x = self.hover_pos.x() + 10
-            tooltip_y = self.hover_pos.y() - 25
-            
-            # If it would overflow to the right, place on the left
-            if tooltip_x + tooltip_width > self.width():
-                tooltip_x = self.hover_pos.x() - tooltip_width - 10
-            
-            # If it would overflow above, place below
-            if tooltip_y < 0:
-                tooltip_y = self.hover_pos.y() + 10
-            
-            painter.setBrush(QBrush(QColor(50, 50, 50, 230)))
-            painter.setPen(QPen(QColor(200, 200, 200)))
-            painter.drawRoundedRect(
-                tooltip_x, tooltip_y,
-                tooltip_width, tooltip_height,
-                3, 3
-            )
-            
-            # Tooltip text
-            painter.setPen(QColor(255, 255, 255))
-            painter.drawText(
-                tooltip_x + padding,
-                tooltip_y + padding + fm.ascent(),
-                tooltip_text
-            )
-    
-    def mouseMoveEvent(self, event: QMouseEvent):
-        """Track mouse movement over the heatmap"""
-        today = date.today()
-        start_date = today - timedelta(days=365)
-        x_offset = 60
-        y_offset = 20  # Start below month labels
-        
-        mx = event.pos().x()
-        my = event.pos().y()
-        
-        found = False
-        for week in range(self.weeks):
-            for day in range(self.days):
-                cell_date = start_date + timedelta(weeks=week, days=day)
-                if cell_date > today:
-                    continue
-                
-                x = x_offset + week * (self.cell_size + self.cell_gap)
-                y = y_offset + day * (self.cell_size + self.cell_gap)
-                
-                if x <= mx <= x + self.cell_size and y <= my <= y + self.cell_size:
-                    self.hover_date = cell_date.isoformat()
-                    self.hover_pos = event.pos()
-                    found = True
-                    self.update()
-                    break
-            if found:
-                break
-        
-        if not found:
-            if self.hover_date is not None:
-                self.hover_date = None
-                self.hover_pos = None
-                self.update()
-    
-    def leaveEvent(self, event):
-        """Reset hover state when the cursor leaves"""
-        self.hover_date = None
-        self.hover_pos = None
-        self.update()
+# Import PyQt6 modules
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QFileDialog, QMessageBox, QDialog,
+    QScrollArea, QGridLayout, QSpinBox, QCheckBox, QRadioButton,
+    QButtonGroup, QGroupBox, QSlider, QProgressBar, QComboBox,
+    QLineEdit, QTextEdit, QTabWidget, QSplitter, QTableWidget,
+    QTableWidgetItem, QHeaderView, QMenu, QToolBar, QStatusBar,
+    QFrame, QSpacerItem, QSizePolicy, QListWidget, QListWidgetItem,
+    QTreeWidget, QTreeWidgetItem, QCalendarWidget, QTimeEdit, QDateEdit
+)
+from PyQt6.QtCore import (
+    Qt, QTimer, pyqtSignal, QPoint, QRect, QSize, QThread,
+    QDate, QTime, QDateTime, QUrl, QPropertyAnimation, QEasingCurve,
+    QEvent, QMimeData
+)
+from PyQt6.QtGui import (
+    QPixmap, QImage, QPainter, QColor, QBrush, QPen, QFont,
+    QIcon, QPaintEvent, QMouseEvent, QKeyEvent, QDragEnterEvent,
+    QDropEvent, QGuiApplication, QAction, QCursor, QFontMetrics
+)
 
 
-# ============== Screenshot mode widget ==============
-class ScreenshotOverlay(QWidget):
-    """Screenshot mode overlay"""
-    
-    screenshot_taken = pyqtSignal(QPixmap)
-    cancelled = pyqtSignal()
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMouseTracking(True)
-        
-        self.start_pos = None
-        self.end_pos = None
-        self.selecting = False
-        self.screenshot = None
-        
-    def start_capture(self):
-        """Begin screenshot capture"""
-        # Reset selection area
-        self.start_pos = None
-        self.end_pos = None
-        self.selecting = False
-        
-        screen = QGuiApplication.primaryScreen()
-        self.screenshot = screen.grabWindow(0)
-        self.setGeometry(screen.geometry())
-        self.showFullScreen()
-        self.activateWindow()
-        
-    def paintEvent(self, event: QPaintEvent):
-        painter = QPainter(self)
-        
-        if self.screenshot:
-            painter.drawPixmap(0, 0, self.screenshot)
-        
-        # Semi-transparent dark overlay
-        overlay = QColor(0, 0, 0, 128)
-        painter.fillRect(self.rect(), overlay)
-        
-        # Draw selection rectangle
-        if self.start_pos and self.end_pos:
-            rect = QRect(self.start_pos, self.end_pos).normalized()
-            
-            # Show the original image within the selection (1:1)
-            if self.screenshot:
-                # Account for devicePixelRatio when mapping to source
-                ratio = self.screenshot.devicePixelRatio()
-                source_rect = QRect(
-                    int(rect.x() * ratio),
-                    int(rect.y() * ratio),
-                    int(rect.width() * ratio),
-                    int(rect.height() * ratio)
-                )
-                # Draw using the original pixels
-                painter.drawPixmap(rect, self.screenshot, source_rect)
-            
-            # White border
-            pen = QPen(QColor(255, 255, 255), 2)
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(rect)
-    
-    def mousePressEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.start_pos = event.pos()
-            self.end_pos = event.pos()
-            self.selecting = True
-            self.update()
-    
-    def mouseMoveEvent(self, event: QMouseEvent):
-        if self.selecting:
-            self.end_pos = event.pos()
-            self.update()
-    
-    def mouseReleaseEvent(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton and self.selecting:
-            self.selecting = False
-            self.end_pos = event.pos()
-            
-            if self.start_pos and self.end_pos:
-                rect = QRect(self.start_pos, self.end_pos).normalized()
-                if rect.width() > 10 and rect.height() > 10:
-                    # Adjust for devicePixelRatio to crop accurate region
-                    ratio = self.screenshot.devicePixelRatio()
-                    scaled_rect = QRect(
-                        int(rect.x() * ratio),
-                        int(rect.y() * ratio),
-                        int(rect.width() * ratio),
-                        int(rect.height() * ratio)
-                    )
-                    cropped = self.screenshot.copy(scaled_rect)
-                    self.hide()
-                    self.screenshot_taken.emit(cropped)
-                    return
-            
-            self.update()
-    
-    def keyPressEvent(self, event: QKeyEvent):
-        if event.key() == Qt.Key.Key_Escape:
-            self.hide()
-            self.cancelled.emit()
-
-
-# ============== Image viewer window ==============
-class ImageViewerWindow(QWidget):
-    """Croquis image viewer window"""
-    
-    croquis_completed = pyqtSignal()
-    croquis_saved = pyqtSignal(QPixmap, QPixmap, int, str, dict)  # original, screenshot, duration, filename, metadata
-    
-    def __init__(self, settings: CroquisSettings, images: List[Any], lang: str = "ko", parent=None):
-        super().__init__(parent)
-        self.setWindowIcon(get_app_icon())  # Set window icon
-        self.settings = settings
-        self.images = images  # List of str (file path) or dict (image data)
-        self.lang = lang
-        self.current_index = 0
-        self.paused = False
-        self.remaining_time = settings.time_seconds if not settings.study_mode else 0
-        self.elapsed_time = 0  # Elapsed time for study mode
-        self.random_seed = None
-        
-        # Set window icon
-        self.setWindowIcon(get_app_icon())
-        
-        # Always shuffle using difficulty-weighted random order
-        self.random_seed = random.randint(0, 1000000)
-        random.seed(self.random_seed)
-        self.images = self.weighted_shuffle(self.images)
-        
-        self.setup_ui()
-        self.setup_timer()
-        self.load_current_image()
-    
-    def weighted_shuffle(self, images: List[Any]) -> List[Any]:
-        """Randomize images weighted by difficulty"""
-        if not images:
-            return images
-        
-        # Compute weights (higher difficulty appears more often)
-        weights = []
-        for img in images:
-            if isinstance(img, dict):
-                difficulty = img.get("difficulty", 1)
-                # Weight as difficulty^2 (1→1, 2→4, 3→9, 4→16, 5→25)
-                weight = difficulty * difficulty
-                weights.append(weight)
-            else:
-                weights.append(1)
-        
-        # Weighted random selection
-        total_weight = sum(weights)
-        if total_weight == 0:
-            return images
-        
-        result = []
-        remaining = images.copy()
-        remaining_weights = weights.copy()
-        
-        while remaining:
-            # Build cumulative probability
-            cumulative = []
-            cumsum = 0
-            for w in remaining_weights:
-                cumsum += w
-                cumulative.append(cumsum)
-            
-            # Pick by random threshold
-            rand_val = random.random() * cumsum
-            for i, cum in enumerate(cumulative):
-                if rand_val <= cum:
-                    result.append(remaining[i])
-                    remaining.pop(i)
-                    remaining_weights.pop(i)
-                    break
-        
-        return result
-        
-    def setup_ui(self):
-        # Configure window without title bar
-        self.setWindowFlags(
-            Qt.WindowType.Window | 
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint  # Keep above other apps
-        )
-        self.setFixedSize(self.settings.image_width, self.settings.image_height + 50)  # Fixed size
-        
-        # Center on screen
-        screen = QGuiApplication.primaryScreen().geometry()
-        x = (screen.width() - self.settings.image_width) // 2
-        y = (screen.height() - (self.settings.image_height + 50)) // 2
-        self.move(x, y)
-        
-        # Track mouse drag position for moving
-        self.drag_position = None
-        
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        
-        # Image display area
-        self.image_container = QWidget()
-        self.image_container.setMinimumSize(self.settings.image_width, self.settings.image_height)
-        image_layout = QVBoxLayout(self.image_container)
-        image_layout.setContentsMargins(0, 0, 0, 0)
-        
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.image_label.setStyleSheet("background-color: #2a2a2a;")
-        image_layout.addWidget(self.image_label)
-        
-        # Timer label over the image
-        self.timer_label = QLabel(self.image_container)
-        self.timer_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                background-color: rgba(0, 0, 0, 150);
-                padding: 5px 10px;
-                border-radius: 5px;
-            }
-        """)
-        self.update_timer_position()
-        self.update_timer_font()
-        
-        # Today's croquis count label over the image
-        self.today_count_label = QLabel(self.image_container)
-        self.today_count_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                background-color: rgba(0, 0, 0, 150);
-                padding: 5px 10px;
-                border-radius: 5px;
-            }
-        """)
-        self.update_today_count_display()
-        self.update_today_count_font()
-        self.update_today_count_position()
-        
-        layout.addWidget(self.image_container, 1)
-        
-        # Control button area
-        control_widget = QWidget()
-        control_widget.setStyleSheet("background-color: #333;")
-        control_layout = QHBoxLayout(control_widget)
-        control_layout.setContentsMargins(10, 5, 10, 5)
-        
-        # Load resource loader
-        resource_loader = QtResourceLoader()
-        
-        # Icon buttons
-        self.prev_btn = QPushButton()
-        self.prev_btn.setIcon(resource_loader.get_icon("/buttons/이전.png"))
-        self.prev_btn.setIconSize(QSize(24, 24))
-        self.prev_btn.setToolTip(tr("previous", self.lang))
-        self.prev_btn.clicked.connect(self.previous_image)
-        
-        self.pause_btn = QPushButton()
-        self.pause_btn.setIcon(resource_loader.get_icon("/buttons/일시 정지.png"))
-        self.pause_btn.setIconSize(QSize(24, 24))
-        self.pause_btn.setToolTip(tr("pause", self.lang))
-        self.pause_btn.clicked.connect(self.toggle_pause)
-        
-        self.next_btn = QPushButton()
-        self.next_btn.setIcon(resource_loader.get_icon("/buttons/다음.png"))
-        self.next_btn.setIconSize(QSize(24, 24))
-        self.next_btn.setToolTip(tr("next", self.lang))
-        self.next_btn.clicked.connect(self.next_image_no_screenshot)
-        
-        self.stop_btn = QPushButton()
-        self.stop_btn.setIcon(resource_loader.get_icon("/buttons/정지.png"))
-        self.stop_btn.setIconSize(QSize(24, 24))
-        self.stop_btn.setToolTip(tr("stop", self.lang))
-        self.stop_btn.clicked.connect(self.stop_croquis)
-        
-        for btn in [self.prev_btn, self.pause_btn, self.next_btn, self.stop_btn]:
-            btn.setFixedSize(40, 40)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: rgba(85, 85, 85, 180);
-                    border: none;
-                    border-radius: 20px;
-                }
-                QPushButton:hover {
-                    background-color: rgba(102, 102, 102, 200);
-                }
-                QPushButton:pressed {
-                    background-color: rgba(68, 68, 68, 220);
-                }
-            """)
-        
-        control_layout.addStretch()
-        control_layout.addWidget(self.prev_btn)
-        control_layout.addWidget(self.pause_btn)
-        control_layout.addWidget(self.next_btn)
-        control_layout.addWidget(self.stop_btn)
-        control_layout.addStretch()
-        
-        layout.addWidget(control_widget)
-        
-        # Screenshot overlay
-        self.screenshot_overlay = ScreenshotOverlay()
-        self.screenshot_overlay.screenshot_taken.connect(self.on_screenshot_taken)
-        self.screenshot_overlay.cancelled.connect(self.on_screenshot_cancelled)
-        
-    def setup_timer(self):
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.on_timer_tick)
-        self.timer.start(1000)
-        
-    def update_timer_position(self):
-        pos = self.settings.timer_position
-        margin = 10
-        
-        self.timer_label.adjustSize()
-        w = self.timer_label.width()
-        h = self.timer_label.height()
-        cw = self.image_container.width()
-        ch = self.image_container.height()
-        
-        positions = {
-            "bottom_right": (cw - w - margin, ch - h - margin),
-            "bottom_center": ((cw - w) // 2, ch - h - margin),
-            "bottom_left": (margin, ch - h - margin),
-            "top_right": (cw - w - margin, margin),
-            "top_center": ((cw - w) // 2, margin),
-            "top_left": (margin, margin),
-        }
-        
-        x, y = positions.get(pos, positions["bottom_right"])
-        self.timer_label.move(x, y)
-        
-    def update_timer_font(self):
-        sizes = {"large": 24, "medium": 18, "small": 12}
-        size = sizes.get(self.settings.timer_font_size, 24)
-        font = QFont("Arial", size, QFont.Weight.Bold)
-        self.timer_label.setFont(font)
-    
-    def load_today_croquis_count(self):
-        """Load today's croquis count from history data"""
-        dat_dir = get_data_path() / "dat"
-        data_path = dat_dir / "croquis_history.dat"
-        if data_path.exists():
-            try:
-                with open(data_path, "rb") as f:
-                    encrypted = f.read()
-                decrypted = decrypt_data(encrypted)
-                today = date.today().isoformat()
-                return decrypted.get(today, 0)
-            except Exception:
-                return 0
-        return 0
-    
-    def update_today_count_display(self):
-        """Update today's croquis count display"""
-        count = self.load_today_croquis_count()
-        self.today_count_label.setText(f"{count} {tr('croquis_times', self.lang)}")
-        self.today_count_label.adjustSize()
-    
-    def update_today_count_font(self):
-        """Update today's croquis count font size"""
-        sizes = {"large": 20, "medium": 15, "small": 10}
-        size = sizes.get(self.settings.today_croquis_count_font_size, 15)
-        font = QFont("Arial", size, QFont.Weight.Bold)
-        self.today_count_label.setFont(font)
-    
-    def update_today_count_position(self):
-        """Update today's croquis count position, avoiding overlap with timer"""
-        pos = self.settings.today_croquis_count_position
-        timer_pos = self.settings.timer_position
-        margin = 10
-        
-        self.today_count_label.adjustSize()
-        w = self.today_count_label.width()
-        h = self.today_count_label.height()
-        cw = self.image_container.width()
-        ch = self.image_container.height()
-        
-        positions = {
-            "bottom_right": (cw - w - margin, ch - h - margin),
-            "bottom_center": ((cw - w) // 2, ch - h - margin),
-            "bottom_left": (margin, ch - h - margin),
-            "top_right": (cw - w - margin, margin),
-            "top_center": ((cw - w) // 2, margin),
-            "top_left": (margin, margin),
-        }
-        
-        x, y = positions.get(pos, positions["top_right"])
-        
-        # Check for overlap with timer
-        if pos == timer_pos:
-            # If positions match, adjust based on vertical position
-            if "top" in pos:
-                # Move today count below timer
-                timer_h = self.timer_label.height()
-                y = margin + timer_h + 5
-            else:  # "bottom" in pos
-                # Move today count above timer
-                timer_h = self.timer_label.height()
-                y = ch - h - margin - timer_h - 5
-        
-        self.today_count_label.move(x, y)
-        
-    def load_current_image(self):
-        if 0 <= self.current_index < len(self.images):
-            image_item = self.images[self.current_index]
-            
-            # Load image (dict or str)
-            if isinstance(image_item, dict):
-                # New format: decode image_data from dict
-                try:
-                    image_data_b64 = image_item.get("image_data", "")
-                    image_bytes = base64.b64decode(image_data_b64)
-                    pixmap = QPixmap()
-                    pixmap.loadFromData(image_bytes)
-                    self.current_filename = image_item.get("filename", "unknown")
-                except Exception as e:
-                    print(tr("image_load_failed", self.lang).format(e))
-                    return
-            else:
-                # Legacy format: load directly from file path
-                pixmap = QPixmap(image_item)
-                self.current_filename = os.path.basename(image_item)
-            
-            if self.settings.grayscale:
-                image = pixmap.toImage().convertToFormat(QImage.Format.Format_Grayscale8)
-                pixmap = QPixmap.fromImage(image)
-            
-            if self.settings.flip_horizontal:
-                from PyQt6.QtGui import QTransform
-                transform = QTransform().scale(-1, 1)
-                pixmap = pixmap.transformed(transform)
-            
-            scaled = pixmap.scaled(
-                self.settings.image_width, 
-                self.settings.image_height,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation
-            )
-            self.image_label.setPixmap(scaled)
-            self.current_pixmap = pixmap
-            
-            if self.settings.study_mode:
-                self.elapsed_time = 0
-            else:
-                self.remaining_time = self.settings.time_seconds
-            self.update_timer_display()
-            
-    def update_timer_display(self):
-        if self.settings.study_mode:
-            minutes = self.elapsed_time // 60
-            seconds = self.elapsed_time % 60
-        else:
-            minutes = self.remaining_time // 60
-            seconds = self.remaining_time % 60
-        self.timer_label.setText(f"{minutes:02d}:{seconds:02d}")
-        self.timer_label.adjustSize()
-        self.update_timer_position()
-        
-    def on_timer_tick(self):
-        if not self.paused and hasattr(self, 'timer') and self.timer:
-            if self.settings.study_mode:
-                # Study mode: count up
-                self.elapsed_time += 1
-                self.update_timer_display()
-            else:
-                # Regular mode: count down
-                if self.remaining_time > 0:
-                    self.remaining_time -= 1
-                    self.update_timer_display()
-                    
-                    if self.remaining_time == 0:
-                        self.timer.stop()
-                        # 화면이 00:00으로 업데이트될 시간을 준 후 스크린샷 캡처
-                        QTimer.singleShot(150, self.start_screenshot_mode)
-                
-    def start_screenshot_mode(self):
-        logger.info(LOG_MESSAGES["screenshot_mode_enabled"])
-        self.screenshot_overlay.start_capture()
-        
-    def on_screenshot_taken(self, screenshot: QPixmap):
-        # Build custom confirmation dialog
-        dialog = QDialog(self)
-        dialog.setWindowTitle(tr("save_croquis", self.lang))
-        dialog.setModal(True)
-        
-        layout = QVBoxLayout(dialog)
-        
-        # Show large preview image
-        image_label = QLabel()
-        preview = screenshot.scaled(500, 500, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        image_label.setPixmap(preview)
-        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(image_label)
-        
-        # Question prompt
-        question_label = QLabel(tr("save_question", self.lang))
-        question_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        question_label.setStyleSheet("font-size: 14px; padding: 10px;")
-        layout.addWidget(question_label)
-        
-        # Button area
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        
-        yes_btn = QPushButton(tr("yes", self.lang))
-        yes_btn.setMinimumWidth(100)
-        yes_btn.setMinimumHeight(35)
-        yes_btn.clicked.connect(dialog.accept)
-        
-        no_btn = QPushButton(tr("no", self.lang))
-        no_btn.setMinimumWidth(100)
-        no_btn.setMinimumHeight(35)
-        no_btn.clicked.connect(dialog.reject)
-        
-        button_layout.addWidget(yes_btn)
-        button_layout.addWidget(no_btn)
-        button_layout.addStretch()
-        
-        layout.addLayout(button_layout)
-        
-        result = dialog.exec()
-        
-        if result == QDialog.DialogCode.Accepted:
-            self.save_croquis_pair(screenshot)
-            self.next_image()
-        else:
-            self.start_screenshot_mode()
-            
-    def on_screenshot_cancelled(self):
-        logger.info(LOG_MESSAGES["screenshot_mode_cancelled"])
-        self.start_screenshot_mode()
-        
-    def save_croquis_pair(self, screenshot: QPixmap):
-        """Save the croquis image pair with encryption"""
-        logger.info(LOG_MESSAGES["croquis_pair_saved"])
-        # Calculate croquis duration
-        if self.settings.study_mode:
-            croquis_time = self.elapsed_time
-        else:
-            croquis_time = self.settings.time_seconds
-        
-        # Extract current image info
-        current_image = self.images[self.current_index]
-        
-        if isinstance(current_image, dict):
-            # New format: use metadata from dict
-            image_filename = os.path.splitext(current_image.get("filename", "unknown"))[0]
-            image_metadata = {
-                "filename": current_image.get("filename", "unknown"),
-                "path": current_image.get("original_path", ""),
-                "width": current_image.get("width", self.current_pixmap.width()),
-                "height": current_image.get("height", self.current_pixmap.height()),
-                "size": current_image.get("size", 0)
-            }
-        else:
-            # Legacy format: extract metadata from file path
-            current_image_path = current_image
-            image_filename = os.path.splitext(os.path.basename(current_image_path))[0]
-            image_metadata = {
-                "filename": os.path.basename(current_image_path),
-                "path": current_image_path,
-                "width": self.current_pixmap.width(),
-                "height": self.current_pixmap.height(),
-                "size": os.path.getsize(current_image_path) if os.path.exists(current_image_path) else 0
-            }
-        
-        self.croquis_saved.emit(self.current_pixmap, screenshot, croquis_time, image_filename, image_metadata)
-        
-    def previous_image(self):
-        logger.info(LOG_MESSAGES["croquis_previous"])
-        if self.settings.study_mode:
-            # Study mode: switch to screenshot capture
-            self.timer.stop()
-            self.start_screenshot_mode()
-        elif self.current_index > 0:
-            self.current_index -= 1
-            self.load_current_image()
-            self.timer.start(1000)
-            
-    def next_image(self):
-        logger.info(LOG_MESSAGES["croquis_next"])
-        if self.current_index < len(self.images) - 1:
-            self.current_index += 1
-        else:
-            # Loop back to the first image
-            self.current_index = 0
-        self.load_current_image()
-        self.update_today_count_display()  # Update count display
-        self.timer.start(1000)
-            
-    def next_image_no_screenshot(self):
-        if self.settings.study_mode:
-            # Study mode: switch to screenshot capture
-            self.timer.stop()
-            self.start_screenshot_mode()
-        else:
-            self.next_image()
-        
-    def toggle_pause(self):
-        self.paused = not self.paused
-        logger.info(LOG_MESSAGES["croquis_paused" if self.paused else "croquis_playing"])
-        
-        # Swap play/pause icon
-        resource_loader = QtResourceLoader()
-        if self.paused:
-            self.pause_btn.setIcon(resource_loader.get_icon("/buttons/재생.png"))
-            self.pause_btn.setToolTip(tr("play", self.lang))
-        else:
-            self.pause_btn.setIcon(resource_loader.get_icon("/buttons/일시 정지.png"))
-            self.pause_btn.setToolTip(tr("pause", self.lang))
-            if self.remaining_time == 0:
-                self.next_image()
-                
-    def stop_croquis(self):
-        logger.info(LOG_MESSAGES["croquis_stopped"])
-        if hasattr(self, 'timer') and self.timer:
-            self.timer.stop()
-            self.timer.deleteLater()
-            self.timer = None
-        if hasattr(self, 'screenshot_overlay'):
-            self.screenshot_overlay.hide()
-            self.screenshot_overlay.close()
-            self.screenshot_overlay = None
-        self.croquis_completed.emit()
-        self.close()
-    
-    def closeEvent(self, event):
-        """Handle window close event"""
-        logger.info(LOG_MESSAGES["croquis_window_closed"])
-        if hasattr(self, 'timer') and self.timer:
-            self.timer.stop()
-            self.timer.deleteLater()
-            self.timer = None
-        if hasattr(self, 'screenshot_overlay') and self.screenshot_overlay:
-            self.screenshot_overlay.hide()
-            self.screenshot_overlay.close()
-            self.screenshot_overlay = None
-        self.croquis_completed.emit()
-        event.accept()
-    
-    def mousePressEvent(self, event: QMouseEvent):
-        """Start drag on mouse press"""
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
-            event.accept()
-    
-    def mouseMoveEvent(self, event: QMouseEvent):
-        """Move window while dragging"""
-        if event.buttons() == Qt.MouseButton.LeftButton and self.drag_position is not None:
-            self.move(event.globalPosition().toPoint() - self.drag_position)
-            event.accept()
-        
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.update_timer_position()
-        self.update_today_count_position()
+# ============== Inline Classes (To be refactored) ==============
+# The following classes are still embedded in main.py:
+# - DeckEditorWindow and related classes
+# - HistoryWindow
+# - AlarmWindow
+# - Various dialog classes
+# These will remain here until further refactoring
 
 
 
-# ============== Difficulty widget ==============
-class DifficultyWidget(QWidget):
-    """Difficulty display widget (number plus colored star)"""
-    
-    def __init__(self, difficulty: int, parent=None):
-        super().__init__(parent)
-        self.difficulty = difficulty
-        self.setup_ui()
-    
-    def setup_ui(self):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(3)
-        
-        # Background style
-        self.setStyleSheet("""
-            QWidget {
-                background-color: rgba(0, 0, 0, 150);
-                border-radius: 8px;
-            }
-        """)
-        
-        # Layer 1: difficulty number (white)
-        number_label = QLabel(str(self.difficulty))
-        number_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 11px;
-                font-weight: bold;
-                background-color: transparent;
-            }
-        """)
-        layout.addWidget(number_label)
-        
-        # Layer 2: star widget (transparent background, colored star)
-        star_label = QLabel("★")
-        colors = ["#FFD700", "#FFA500", "#FF8C00", "#FF4500", "#FF0000"]
-        color = colors[self.difficulty - 1] if 1 <= self.difficulty <= 5 else "#FFD700"
-        star_label.setStyleSheet(f"""
-            QLabel {{
-                color: {color};
-                font-size: 11px;
-                font-weight: bold;
-                background-color: transparent;
-            }}
-        """)
-        layout.addWidget(star_label)
-        
-        self.setFixedHeight(20)
-
-
-# ============== Deck item widget ==============
-class DeckItemWidget(QWidget):
-    """Deck editor item widget (image with clickable difficulty)"""
-    
-    def __init__(self, pixmap: QPixmap, img_data: dict, parent_window, parent=None):
-        super().__init__(parent)
-        self.pixmap = pixmap
-        self.img_data = img_data
-        self.parent_window = parent_window
-        self.setup_ui()
-    
-    def setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(2)
-        
-        # Image container
-        container = QWidget()
-        container.setFixedSize(DECK_ICON_WIDTH, DECK_ICON_HEIGHT)
-        
-        # Image label
-        image_label = QLabel(container)
-        image_label.setPixmap(self.pixmap)
-        image_label.setFixedSize(DECK_ICON_WIDTH, DECK_ICON_HEIGHT)
-        image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
-        # Difficulty button (clickable)
-        difficulty = self.img_data.get("difficulty", 1)
-        self.difficulty_btn = QPushButton(container)
-        self.difficulty_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.update_difficulty_display()
-        self.difficulty_btn.clicked.connect(self.cycle_difficulty)
-        
-        layout.addWidget(container)
-        
-        # Filename
-        filename_label = QLabel(f"{self.img_data['filename']}")
-        filename_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        filename_label.setWordWrap(True)
-        filename_label.setStyleSheet("font-size: 9px;")
-        layout.addWidget(filename_label)
-        
-        self.filename_label = filename_label
-    
-    def update_difficulty_display(self):
-        """Update difficulty display"""
-        difficulty = self.img_data.get("difficulty", 1)
-        
-        # Choose star color
-        colors = ["#FFD700", "#FFA500", "#FF8C00", "#FF4500", "#FF0000"]
-        color = colors[difficulty - 1] if 1 <= difficulty <= 5 else "#FFD700"
-        
-        # Build difficulty widget
-        diff_widget = DifficultyWidget(difficulty)
-        diff_widget.resize(diff_widget.sizeHint())
-        
-        # Render difficulty widget to pixmap
-        diff_pixmap = QPixmap(diff_widget.size())
-        diff_pixmap.fill(Qt.GlobalColor.transparent)
-        diff_widget.render(diff_pixmap)
-        
-        # Apply as button icon
-        self.difficulty_btn.setIcon(QIcon(diff_pixmap))
-        self.difficulty_btn.setIconSize(diff_pixmap.size())
-        self.difficulty_btn.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-            }
-        """)
-        
-        # Position button at bottom-right
-        btn_size = diff_pixmap.size()
-        self.difficulty_btn.setFixedSize(btn_size)
-        self.difficulty_btn.move(90 - btn_size.width(), 110 - btn_size.height())
-    
-    def cycle_difficulty(self):
-        """Cycle difficulty (1→2→3→4→5→1)"""
-        current = self.img_data.get("difficulty", 1)
-        new_difficulty = (current % 5) + 1
-        
-        self.img_data["difficulty"] = new_difficulty
-        logger.info(LOG_MESSAGES["difficulty_changed"].format(self.img_data['filename'], new_difficulty))
-        
-        # Update parent window deck_images
-        filename = self.img_data["filename"]
-        for i, deck_img in enumerate(self.parent_window.deck_images):
-            if deck_img.get("filename") == filename:
-                self.parent_window.deck_images[i]["difficulty"] = new_difficulty
-                break
-        
-        # Refresh UI
-        self.update_difficulty_display()
-        
-        # Refresh filename label
-        self.filename_label.setText(f"{self.img_data['filename']}")
-        
-        self.parent_window.save_temp_file()
-        self.parent_window.mark_modified()
-
-
-# ============== Image property dialogs ==============
 class ImageRenameDialog(QDialog):
     """Dialog to rename an image file"""
     
@@ -1540,6 +359,7 @@ class DeckListWidget(QListWidget):
             super().keyPressEvent(event)
 
 
+# ============== Croquis deck editor ==============
 # ============== Croquis deck editor ==============
 class DeckEditorWindow(QMainWindow):
     """Croquis deck editor window"""
@@ -2812,6 +1632,15 @@ class DeckEditorWindow(QMainWindow):
         
         dialog = ImagePropertiesDialog(img_data, self.lang, self)
         dialog.exec()
+    
+    def _update_heatmap_title(self):
+        """Update heatmap group title"""
+        if hasattr(self, 'heatmap_widget') and hasattr(self, 'heatmap_group'):
+            heatmap_title_key = tr("heatmap_title", self.lang)
+            croquis_count_key = tr("croquis_count", self.lang)
+            croquis_times_key = tr("croquis_times", self.lang)
+            count_text = f"{croquis_count_key}: {self.heatmap_widget.total_count} {croquis_times_key}"
+            self.heatmap_group.setTitle(f"  {heatmap_title_key} ({count_text})")
     
     def update_title(self):
         """Update window title"""
@@ -4288,47 +3117,18 @@ class MainWindow(QMainWindow):
         # Initialization flag
         self._initializing = True
         
-        # Use centralized app state
-        from core.app_state import get_app_state
-        self.app_state = get_app_state()
-        
-        # Load settings from state
-        self.settings = self.app_state.settings
+        # Load settings directly (simplified, no AppState)
+        # Load settings directly (simplified, no AppState)
         self.load_settings()
-        self.lang = self.settings.language  # Add lang attribute
+        self.lang = self.settings.language
         self.image_files: List[str] = []
-        self.enabled_tags: set = set()  # 활성화된 태그
-        
-        # Connect to state signals
-        self.app_state.settings_changed.connect(self.on_state_settings_changed)
-        self.app_state.deck_changed.connect(self.on_state_deck_changed)
-        self.app_state.language_changed.connect(self.on_state_language_changed)
+        self.enabled_tags: set = set()
         
         self.setup_ui()
         self.apply_language()
-        # Don't call apply_dark_mode() - using QSS instead
         
         # Initialization complete
         self._initializing = False
-        
-    def on_state_settings_changed(self):
-        """Handle settings change from AppState"""
-        self.settings = self.app_state.settings
-        self.lang = self.settings.language
-        self.apply_language()
-    
-    def on_state_deck_changed(self, deck_path: str):
-        """Handle deck change from AppState"""
-        self.image_files = self.app_state.image_files
-        if self.image_files:
-            self.folder_value.setText(f"{os.path.basename(deck_path)} ({len(self.image_files)} {tr('images_count', self.lang)})")
-            self.start_btn.setEnabled(True)
-            self.tag_filter_btn.setEnabled(True)
-    
-    def on_state_language_changed(self, lang: str):
-        """Handle language change from AppState"""
-        self.lang = lang
-        self.apply_language()
         
     def setup_ui(self):
         self.setWindowTitle(tr("app_title", self.lang))
@@ -4342,23 +3142,28 @@ class MainWindow(QMainWindow):
         
         # Heatmap section
         heatmap_group = QGroupBox()
-        heatmap_group.setMinimumHeight(150)  # Keep tooltips from clipping
+        heatmap_group.setMinimumHeight(155)  # Keep tooltips from clipping
         self.heatmap_group = heatmap_group
         heatmap_layout = QVBoxLayout(heatmap_group)
         heatmap_layout.setContentsMargins(10, 20, 10, 5)  # Minimize vertical padding
         heatmap_layout.setSpacing(0)
         
-        # Align heatmap to the right
+        # Align heatmap to the center
         heatmap_container = QHBoxLayout()
         heatmap_container.setContentsMargins(0, 0, 0, 0)
         heatmap_container.setSpacing(0)
         heatmap_container.addStretch(1)
         self.heatmap_widget = HeatmapWidget(lang=self.lang)
         self.heatmap_widget.setMinimumSize(600, 120)
+        self.heatmap_widget.setMaximumSize(600, 120)
         self.heatmap_widget.setContentsMargins(0, 0, 0, 0)
+        self.heatmap_widget.show()  # Ensure widget is visible
         heatmap_container.addWidget(self.heatmap_widget)
         heatmap_container.addStretch(1)
         heatmap_layout.addLayout(heatmap_container)
+        
+        # Set initial heatmap title
+        self._update_heatmap_title()
         
         main_layout.addWidget(heatmap_group)
         
@@ -4610,6 +3415,15 @@ class MainWindow(QMainWindow):
         
         # Enable/disable time input based on study mode
         self.time_input.setEnabled(not self.settings.study_mode)
+    
+    def _update_heatmap_title(self):
+        """Update heatmap group title"""
+        if hasattr(self, 'heatmap_widget') and hasattr(self, 'heatmap_group'):
+            heatmap_title_key = tr("heatmap_title", self.lang)
+            croquis_count_key = tr("croquis_count", self.lang)
+            croquis_times_key = tr("croquis_times", self.lang)
+            count_text = f"{croquis_count_key}: {self.heatmap_widget.total_count} {croquis_times_key}"
+            self.heatmap_group.setTitle(f"  {heatmap_title_key} ({count_text})")
         
     def apply_language(self):
         """Apply translated UI text for current language."""
@@ -4617,10 +3431,9 @@ class MainWindow(QMainWindow):
         
         self.setWindowTitle(tr("app_title", self.lang))
         
-        # Heatmap
-        count = self.heatmap_widget.total_count
-        self.heatmap_group.setTitle(f"{tr('heatmap_title', self.lang)} - {tr('croquis_count', self.lang)}: {count} {tr('croquis_times', self.lang)}")
+        # Heatmap - update title and language
         self.heatmap_widget.lang = self.lang
+        self._update_heatmap_title()
         
         # Basic settings
         self.basic_group.setTitle(tr("basic_settings", self.lang))
@@ -4768,9 +3581,6 @@ class MainWindow(QMainWindow):
                 self.start_btn.setEnabled(True)
                 self.tag_filter_btn.setEnabled(True)  # Enable tag filter button
                 self.save_settings()
-                
-                # Update AppState
-                self.app_state.load_deck(file_path, self.image_files)
             else:
                 QMessageBox.warning(self, tr("warning", self.lang), tr("deck_no_valid_images", self.lang))
         except Exception as e:
@@ -4884,9 +3694,6 @@ class MainWindow(QMainWindow):
             self.settings.language = "en"
         self.lang = self.settings.language  # Update lang attribute
         logger.info(LOG_MESSAGES["language_changed"].format(self.lang))
-        
-        # Update AppState (will trigger apply_language via signal)
-        self.app_state.set_language(self.lang)
         
         self.apply_language()
         self.save_settings()
@@ -5005,6 +3812,7 @@ class MainWindow(QMainWindow):
             f.write(encrypted)
             
         self.heatmap_widget.add_croquis(1)
+        self._update_heatmap_title()
         
     def open_deck_editor(self):
         """Open deck editor window."""
@@ -5058,9 +3866,6 @@ class MainWindow(QMainWindow):
         encrypted = encrypt_data(asdict(self.settings))
         with open(settings_path, "wb") as f:
             f.write(encrypted)
-        
-        # Update AppState
-        self.app_state.update_settings(self.settings)
             
     def closeEvent(self, event):
         logger.info(LOG_MESSAGES["program_closed"])

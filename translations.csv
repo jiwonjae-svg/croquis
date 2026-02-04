@@ -1,0 +1,177 @@
+key,ko,en,ja
+app_title,Croquis,Croquis,クロッキー
+heatmap_title,크로키 히트맵,Croquis Heatmap,クロッキーヒートマップ
+croquis_count,크로키 횟수,Croquis Count,クロッキー回数
+croquis_times,회,times,回
+less,Less,Less,少ない
+more,More,More,多い
+basic_settings,기본 설정,Basic Settings,基本設定
+croquis_deck,크로키 덱:,Croquis Deck:,クロッキーデッキ:
+croquis_deck_file,크로키 덱 파일,Croquis Deck File,クロッキーデッキファイル
+select_deck_file,크로키 덱 파일 선택,Select Croquis Deck File,クロッキーデッキファイルを選択
+images_count,이미지,images,画像
+select_deck,덱 선택,Select Deck,デッキを選択
+deck_not_selected,덱이 선택되지 않았습니다.,Deck not selected.,デッキが選択されていません。
+image_settings,이미지 설정,Image Settings,画像設定
+image_width,이미지 창 너비:,Image Window Width:,画像ウィンドウ幅:
+image_height,이미지 창 높이:,Image Window Height:,画像ウィンドウ高さ:
+random_order,랜덤 순서,Random Order,ランダム順序
+grayscale,흑백 표시,Grayscale,グレースケール
+flip_horizontal,좌우 반전,Flip Horizontal,左右反転
+timer_settings,타이머 설정,Timer Settings,タイマー설정
+timer_position,타이머 위치:,Timer Position:,タイマー位置:
+timer_font_size,타이머 폰트 크기:,Timer Font Size:,タイマーフォントサイズ:
+time_setting,시간 설정 (초):,Time Setting (sec):,時間設定（秒）:
+today_croquis_count_position,오늘자 크로키 수 위치:,Today's Count Position:,今日の完了数位置:
+today_croquis_count_font_size,오늘자 크로키 수 폰트 크기:,Today's Count Font Size:,今日の完了数フォントサイズ:
+font_large_20,크게,Large,大
+font_medium_15,보통,Medium,中
+font_small_10,작게,Small,小
+other_settings,기타 설정,Other Settings,その他の設定
+language,언어:,Language:,言語:
+dark_mode,다크 모드,Dark Mode,ダークモード
+start_croquis,크로키 시작,Start Croquis,クロッキー開始
+edit_deck,크로키 덱 편집,Edit Croquis Deck,クロッキーデッキ編集
+croquis_history,크로키 히스토리,Croquis History,クロッキー履歴
+filter_by_date,날짜 필터:,Filter by Date:,日付フィルター:
+croquis_large_view,크로키 상세 보기,Croquis Large View,クロッキー詳細ビュー
+original_image,원본,Original,オリジナル
+croquis_image,크로키,Croquis,クロッキー
+all,전체,All,全て
+croquis_alarm,크로키 알람,Croquis Alarm,クロッキーアラーム
+alarm_list_label,설정된 알람 목록:,Configured Alarm List:,設定されたアラーム一覧:
+add_alarm,알람 추가,Add Alarm,アラーム追加
+edit_alarm,알람 수정,Edit Alarm,アラーム編集
+delete_alarm,알람 삭제,Delete Alarm,アラーム削除
+alarm_title,알람 제목,Alarm Title,アラームタイトル
+alarm_message,알람 메시지,Alarm Message,アラームメッセージ
+alarm_time,알람 시간,Alarm Time,アラーム時間
+weekday_repeat,요일 반복,Weekday Repeat,曜日繰り返し
+specific_date,특정 날짜,Specific Date,特定の日付
+weekday_repeat_select,반복 요일 선택,Select Repeat Weekdays,繰り返す曜日を選択
+specific_date_select,날짜 선택,Select Specific Date,特定の日付を選択
+mon,월,Mon,月
+tue,화,Tue,火
+wed,수,Wed,水
+thu,목,Thu,木
+fri,금,Fri,金
+sat,토,Sat,土
+sun,일,Sun,日
+large,크게,Large,大
+medium,보통,Medium,中
+small,작게,Small,小
+bottom_right,오른쪽 아래,bottom_right,右下
+bottom_center,아래 가운데,bottom_center,中央下
+bottom_left,왼쪽 아래,bottom_left,左下
+top_right,오른쪽 위,top_right,右上
+top_center,가운데 위,top_center,中央上
+top_left,왼쪽 위,top_left,左上
+file,파일,File,ファイル
+new,새로 만들기,New,新規
+open,불러오기,Open,開く
+open_recent,최근 파일,Open Recent,最近開いたファイル
+open_recent_clear,최근 파일 목록 지우기,Clear Recent Files,最近開いたファイルをクリア
+open_recent_empty,최근 파일 없음,No Recent Files,最近開いたファイルがありません
+save,저장,Save,保存
+save_as,다른 이름으로 저장,Save As,名前を付けて保存
+import_images,이미지 불러오기,Import Images,画像をインポート
+deck_images,덱 이미지,Deck Images,デッキ画像
+image_info,이미지 정보,Image Info,画像情報
+save_croquis,크로키 저장,Save Croquis,クロッキーを保存
+save_question,이 크로키를 저장하시겠습니까?,Do you want to save this croquis?,このクロッキーを保存しますか？
+yes,예,Yes,はい
+no,아니오,No,いいえ
+previous,이전,Previous,前へ
+next,다음,Next,次へ
+pause,정지,Pause,一時停止
+play,재생,Play,再生
+stop,종료,Stop,終了
+korean,한국어,한국어,한国語
+english,English,English,English
+add_memo,메모하기,Add Memo,メモする
+memo,메모,Memo,メモ
+memo_placeholder,여기에 메모를 입력하세요...,Enter memo here...,ここにメモを入力してください...
+memo_save_failed,메모 저장 중 오류가 발생했습니다:\n{},Failed to save memo:\n{},メモ保存中にエラーが発生しました:\n{}
+close,닫기,Close,閉じる
+rename_title,이름 바꾸기,Rename,名前を変更
+current_label,<b>현재:</b>,<b>Current:</b>,<b>現在:</b>
+new_name_label,<b>새 이름:</b>,<b>New name:</b>,<b>新しい名前:</b>
+name_placeholder,확장자 제외,Exclude extension,拡張子を除く
+invalid_chars,"❌ 사용 불가: \ / : * ? "" < > | .","❌ Not allowed: \ / : * ? "" < > | .","❌ 使用不可: \ / : * ? "" < > | ."
+tag_title,태그 설정,Set Tags,タグ設定
+tag_info,🏷️ '#'로 구분하여 태그를 입력하세요 (각 태그 최대 24자),🏷️ Use '#' to separate tags (max 24 chars each),🏷️ '#'で区切って入力してください（各タグ最大24文字）
+tag_loading,태그를 불러오는 중...,Loading tags...,タグを読み込み中...
+tag_example,예) #여성#전신#역동적,e.g.) #female#fullbody#dynamic,例) #女性#全身#ダイナミック
+tag_placeholder,#태그1#태그2#태그3,#tag1#tag2#tag3,#タグ1#タグ2#タグ3
+properties_title,속성,Properties,プロパティ
+properties_heading,📋 이미지 속성,📋 Image Properties,📋 画像のプロパティ
+prop_filename,📄 파일 이름,📄 File Name,📄 ファイル名
+prop_size,💾 용량,💾 Size,💾 サイズ
+prop_dimensions,📐 크기,📐 Dimensions,📐 解像度
+prop_difficulty,⭐ 난이도,⭐ Difficulty,⭐ 難易度
+prop_tags,🏷️ 태그,🏷️ Tags,🏷️ タグ
+prop_source_path,📍 원본 경로,📍 Source Path,📍 元のパス
+none,없음,None,なし
+view,보기,View,表示
+sort,정렬,Sort,並び替え
+sort_name,이름 순으로 정렬,Sort by Name,名前で並び替え
+sort_size,크기 순으로 정렬,Sort by Size,サイズで並び替え
+sort_difficulty,난이도 순으로 정렬,Sort by Difficulty,難易度で並び替え
+sort_date,날짜 순으로 정렬,Sort by Date,日付で並び替え
+sort_asc,오름차순,Ascending,昇順
+sort_desc,내림차순,Descending,降順
+icon_size,아이콘 크기,Icon Size,アイコンサイズ
+custom,사용자 정의,Custom,カスタム
+custom_size_title,사용자 정의 크기,Custom Size,カスタムサイズ
+custom_size_prompt,아이콘 크기 (%)를 입력하세요:,Enter icon size (%):,アイコンサイズ (%) を入力してください:
+custom_with_value,사용자 정의 ({scale}%),Custom ({scale}%),カスタム ({scale}%)
+delete_selected,선택 삭제,Delete Selected,選択した項目を削除
+croquis_list,크로키 목록,Croquis List,クロッキー一覧
+croquis_list_info,이미지를 선택하면 해당 이미지로 그린 크로키 목록이 표시됩니다.,Select an image to see croquis drawn from it.,画像を選択すると、その画像で描いたクロッキーが表示されます。
+croquis_not_found,선택한 이미지로 그린 크로키가 없습니다.,No croquis found drawn from the selected image.,選択した画像で描かれたクロッキーが見つかりません。
+success,성공,Success,成功
+warning,경고,Warning,警告
+error,오류,Error,エラー
+info,안내,Info,案内
+loading,로딩 중....,Loading....,読み込み中....
+clipboard_no_image_or_url,클립보드에 이미지나 URL이 없습니다.,Clipboard has no image or URL.,クリップボードに画像やURLがありません。
+pinterest_extract_fail,핀터레스트 이미지를 추출할 수 없습니다. 이미지를 우클릭하여 '이미지 주소 복사'로 직접 이미지 URL을 드래그해주세요.,"Could not extract Pinterest image. Right-click the image, copy image address, and paste the direct URL.",Pinterest画像を取得できません。画像を右クリックして『画像アドレスをコピー』し、直接URLを貼り付けてください。
+invalid_image,올바른 이미지 파일이 아닙니다.,This is not a valid image file.,有効な画像ファイルではありません。
+download_error,이미지를 다운로드하는 중 오류가 발생했습니다:\n{},Error while downloading image:\n{},画像のダウンロード中にエラーが発生しました:\n{}
+save_confirm_title,저장 확인,Save Confirmation,保存の確認
+save_confirm_body,현재 파일이 수정되었습니다. 저장하시겠습니까?,"The file has changes. Save now?",ファイルが変更されています。保存しますか？
+temp_file_missing,임시 파일을 찾을 수 없습니다.,Temporary file not found.,一時ファイルが見つかりません。
+save_error,파일 저장 중 오류가 발생했습니다:\n{},An error occurred while saving:\n{},保存中にエラーが発生しました:\n{}
+load_error,파일을 불러오는 중 오류가 발생했습니다:\n{},An error occurred while loading:\n{},読み込み中にエラーが発生しました:\n{}
+url_required,이미지 URL을 복사해주세요.\n핀터레스트 핀 URL도 지원합니다.,Copy an image URL. Pinterest pin URLs are also supported.,画像URLをコピーしてください。PinterestのピンURLも対応しています。
+clipboard_empty,클립보드에 이미지나 URL이 없습니다.,Clipboard has no image or URL.,クリップボードに画像やURLがありません。
+export_image,이미지 내보내기,Export Image,画像を書き出し
+export_success,이미지가 저장되었습니다:\n{},Image saved to:\n{},画像を保存しました:\n{}
+export_failed,이미지 내보내기 중 오류가 발생했습니다:\n{},Error while exporting image:\n{},画像を書き出す際にエラーが発生しました:\n{}
+no_title,제목 없음,Untitled,無題
+paste_image,이미지 붙여넣기,Paste Image,画像を貼り付け
+rename_image,이름 바꾸기,Rename,名前を変更
+difficulty,난이도,Difficulty,難易度
+set_difficulty,난이도 설정,Set Difficulty,難易度を設定
+tag,태그,Tag,タグ
+set_tags,태그 설정하기,Set Tags,タグを設定
+set_tags_filter,태그 필터 설정,Set Tags Filter,タグフィルター設定
+properties,속성,Properties,プロパティ
+unknown,알 수 없음,Unknown,不明
+study_mode,학습 모드,Study Mode,学習モード
+selected_croquis,선택한 크로키,Selected Croquis,選択されたクロッキー
+related_croquis_title,이 이미지로 그린 다른 크로키들,Other Croquis from This Image,この画像で描いた他のクロッキー
+legacy_file_no_related,구버전 파일로 관련 크로키를 찾을 수 없습니다.,Cannot find related croquis (legacy file).,レガシーファイルのため関連クロッキーが見つかりません。
+no_related_croquis,이 이미지로 그린 다른 크로키가 없습니다.,No other croquis drawn from this image.,この画像で描かれた他のクロッキーはありません。
+date_label,날짜:,Date:,日付:
+croquis_time_label,크로키 시간:,Croquis Time:,クロッキー時間:
+select_deck_first,먼저 덱 파일을 선택해주세요.,Please select a deck file first.,まずデッキファイルを選択してください。
+deck_no_valid_images,덱 파일에 유효한 이미지가 없습니다.,No valid images in the deck file.,デッキファイルに有効な画像がありません。
+deck_file_load_error,덱 파일을 불러오는 중 오류가 발생했습니다,Error loading deck file,デッキファイルの読み込みエラー
+image_load_failed,이미지 로드 실패: {},Image load failed: {},画像の読み込みに失敗: {}
+temp_file_save_failed,임시 파일 저장 실패: {},Temporary file save failed: {},一時ファイルの保存に失敗: {}
+temp_file_load_failed,임시 파일 로드 실패: {},Temporary file load failed: {},一時ファイルの読み込みに失敗: {}
+temp_file_delete_failed,임시 파일 삭제 실패: {},Temporary file delete failed: {},一時ファイルの削除に失敗: {}
+pinterest_extract_failed_msg,핀터레스트 이미지 추출 실패: {},Pinterest image extraction failed: {},Pinterest画像の抽出に失敗: {}
+error_loading_file,파일 로드 오류 {}: {},Error loading {}: {},ファイル読み込みエラー {}: {}
+failed_to_load_image_preview,이미지 미리보기를 불러오는데 실패했습니다.,failed to load image preview,画像プレビューの読み込みに失敗しました。

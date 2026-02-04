@@ -2,11 +2,24 @@
 
 
 a = Analysis(
-    ['C:\\Users\\ongji\\OneDrive\\문서\\Porfolio\\Croquis2\\main.py'],
+    ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('dat', 'dat'), ('translations.csv', '.'), ('icon.ico', '.')],
-    hiddenimports=['PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets', 'cryptography.fernet', 'PIL.Image', 'win11toast', 'plyer', 'asyncio'],
+    datas=[
+        ('dat', 'dat'),
+        ('translations.csv', '.'),
+        ('src/assets/icon.ico', '.'),
+    ],
+    hiddenimports=[
+        'PyQt6.QtCore',
+        'PyQt6.QtGui',
+        'PyQt6.QtWidgets',
+        'cryptography.fernet',
+        'PIL.Image',
+        'win11toast',
+        'plyer',
+        'asyncio'
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,5 +48,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Users\\ongji\\OneDrive\\문서\\Porfolio\\Croquis2\\icon.ico'],
+    icon='src/assets/icon.ico',
 )
