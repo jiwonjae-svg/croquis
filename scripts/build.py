@@ -47,8 +47,11 @@ def main():
         )
         print("✅ Build successful!")
         
-        # Verify output
-        exe_path = dist_dir / "Croquis" / "Croquis.exe"
+        # Verify output - check both onefile and onedir formats
+        exe_path = dist_dir / "Croquis.exe"
+        if not exe_path.exists():
+            exe_path = dist_dir / "Croquis" / "Croquis.exe"
+        
         if exe_path.exists():
             print(f"\n✅ Executable created: {exe_path}")
             print(f"   Size: {exe_path.stat().st_size / (1024*1024):.2f} MB")
