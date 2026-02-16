@@ -55,7 +55,7 @@ class QtResourceLoader:
         Load QPixmap from Qt resource
         
         Args:
-            resource_path: Qt resource path (e.g., ":/buttons/정지.png")
+            resource_path: Qt resource path (e.g., "/buttons/정지.png")
         
         Returns:
             QPixmap object (empty if failed)
@@ -65,16 +65,60 @@ class QtResourceLoader:
             return QPixmap()
         
         try:
-            pixmap = QPixmap(resource_path)
+            import base64
+            # Strip : prefix to match dictionary keys
+            dict_key = resource_path[1:] if resource_path.startswith(":") else resource_path
             
-            if pixmap.isNull():
-                logger.warning(f"Failed to load pixmap: {resource_path}")
-                return QPixmap()
+            if dict_key in _RESOURCES_DICT:
+                encoded_data = _RESOURCES_DICT[dict_key]
+                raw_data = base64.b64decode(encoded_data.encode('ascii'))
+                pixmap = QPixmap()
+                pixmap.loadFromData(raw_data)
+                if pixmap.isNull():
+                    logger.warning(f"Failed to decode pixmap data: {resource_path}")
+                    return QPixmap()
+                return pixmap
             
-            return pixmap
+            # Fallback: try loading from filesystem
+            pixmap = self._load_pixmap_fallback(resource_path)
+            if not pixmap.isNull():
+                return pixmap
+            
+            logger.warning(f"Failed to load pixmap: {resource_path}")
+            return QPixmap()
             
         except Exception as e:
             logger.error(f"Error loading pixmap {resource_path}: {e}")
+            return QPixmap()
+    
+    def _load_pixmap_fallback(self, resource_path: str) -> QPixmap:
+        """
+        Fallback method to load pixmap from filesystem
+        """
+        try:
+            if resource_path.startswith(":/"):
+                rel_path = resource_path[2:]
+            elif resource_path.startswith("/"):
+                rel_path = resource_path[1:]
+            else:
+                rel_path = resource_path
+            
+            possible_paths = [
+                Path(__file__).parent.parent / "assets" / rel_path,
+                Path(__file__).parent.parent.parent / rel_path,
+                Path(rel_path)
+            ]
+            
+            for file_path in possible_paths:
+                if file_path.exists():
+                    pixmap = QPixmap(str(file_path))
+                    if not pixmap.isNull():
+                        logger.info(f"Loaded pixmap from fallback: {file_path}")
+                        return pixmap
+            
+            return QPixmap()
+        except Exception as e:
+            logger.error(f"Fallback pixmap load failed for {resource_path}: {e}")
             return QPixmap()
     
     def get_icon(self, resource_path: str) -> QIcon:

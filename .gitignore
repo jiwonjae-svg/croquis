@@ -71,6 +71,7 @@ desktop.ini
 repomix-output.xml
 *.pyc
 *.pyo
+version/
 
 # Test files
 test_*.py

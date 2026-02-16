@@ -175,3 +175,11 @@ temp_file_delete_failed,임시 파일 삭제 실패: {},Temporary file delete fa
 pinterest_extract_failed_msg,핀터레스트 이미지 추출 실패: {},Pinterest image extraction failed: {},Pinterest画像の抽出に失敗: {}
 error_loading_file,파일 로드 오류 {}: {},Error loading {}: {},ファイル読み込みエラー {}: {}
 failed_to_load_image_preview,이미지 미리보기를 불러오는데 실패했습니다.,failed to load image preview,画像プレビューの読み込みに失敗しました。
+shortcut_settings,단축키 설정,Shortcut Settings,ショートカット設定
+shortcut_description,각 항목을 클릭한 후 원하는 키를 눌러주세요.,Click each field and press the desired key.,各項目をクリックして希望のキーを押してください。
+shortcut_next_image,다음 이미지,Next Image,次の画像
+shortcut_previous_image,이전 이미지,Previous Image,前の画像
+shortcut_toggle_pause,일시정지/재생,Pause / Resume,一時停止/再生
+shortcut_stop_croquis,크로키 종료,Stop Croquis,クロッキー終了
+shortcut_reset,기본값으로 초기화,Reset to Defaults,デフォルトに戻す
+shortcut_duplicate,키가 중복됩니다,Duplicate key,キーが重複しています

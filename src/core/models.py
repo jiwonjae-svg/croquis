@@ -2,8 +2,18 @@
 Data models and settings for Croquis application
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, field, asdict
 from typing import Dict, List
+
+
+# Default shortcut key bindings
+DEFAULT_SHORTCUTS = {
+    "next_image": "Space",
+    "previous_image": "Left",
+    "toggle_pause": "P",
+    "stop_croquis": "Escape",
+}
+
 
 @dataclass
 class CroquisSettings:
@@ -21,6 +31,7 @@ class CroquisSettings:
     study_mode: bool = False
     today_croquis_count_position: str = "top_right"
     today_croquis_count_font_size: str = "medium"
+    shortcuts: dict = field(default_factory=lambda: DEFAULT_SHORTCUTS.copy())
 
 
 @dataclass

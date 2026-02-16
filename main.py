@@ -21,7 +21,7 @@ from dataclasses import asdict
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 # Core modules
-from core.models import CroquisSettings, UIConstants
+from core.models import CroquisSettings, UIConstants, DEFAULT_SHORTCUTS
 from core.key_manager import encrypt_data, decrypt_data
 from core.alarm_service import check_and_trigger_alarms
 
@@ -3106,6 +3106,184 @@ class TagFilterDialog(QDialog):
         return self.enabled_tags.copy()
 
 
+# ============== Shortcut Key Configuration ==============
+
+# Display names for shortcut actions (translation keys)
+SHORTCUT_ACTION_TR_KEYS = {
+    "next_image": "shortcut_next_image",
+    "previous_image": "shortcut_previous_image",
+    "toggle_pause": "shortcut_toggle_pause",
+    "stop_croquis": "shortcut_stop_croquis",
+}
+
+# Available keys for shortcut binding
+AVAILABLE_KEYS = [
+    "Space", "Escape", "Enter", "Left", "Right", "Up", "Down",
+    "Tab", "Backspace", "Delete",
+    "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+    "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+]
+
+
+class ShortcutKeyEdit(QLineEdit):
+    """A custom QLineEdit that captures a single key press and displays its name."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setReadOnly(True)
+        self.setPlaceholderText("...")
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._key_name = ""
+
+    def keyPressEvent(self, event: QKeyEvent):
+        key = event.key()
+        # Ignore modifier-only presses
+        if key in (Qt.Key.Key_Shift, Qt.Key.Key_Control, Qt.Key.Key_Alt, Qt.Key.Key_Meta):
+            return
+        # Look up key name
+        for name, qt_key_val in _KEY_NAME_TO_QT_MAP.items():
+            if qt_key_val == key:
+                self._key_name = name
+                self.setText(name)
+                return
+        # Fallback: show nothing for unsupported keys
+        event.ignore()
+
+    def get_key_name(self) -> str:
+        return self._key_name
+
+    def set_key_name(self, name: str):
+        self._key_name = name
+        self.setText(name)
+
+
+# Build Qt key mapping (mirrors ImageViewerWindow but module-level for dialog use)
+_KEY_NAME_TO_QT_MAP = {
+    "Space": Qt.Key.Key_Space,
+    "Escape": Qt.Key.Key_Escape,
+    "Enter": Qt.Key.Key_Return,
+    "Return": Qt.Key.Key_Return,
+    "Left": Qt.Key.Key_Left,
+    "Right": Qt.Key.Key_Right,
+    "Up": Qt.Key.Key_Up,
+    "Down": Qt.Key.Key_Down,
+    "Tab": Qt.Key.Key_Tab,
+    "Backspace": Qt.Key.Key_Backspace,
+    "Delete": Qt.Key.Key_Delete,
+    "A": Qt.Key.Key_A, "B": Qt.Key.Key_B, "C": Qt.Key.Key_C,
+    "D": Qt.Key.Key_D, "E": Qt.Key.Key_E, "F": Qt.Key.Key_F,
+    "G": Qt.Key.Key_G, "H": Qt.Key.Key_H, "I": Qt.Key.Key_I,
+    "J": Qt.Key.Key_J, "K": Qt.Key.Key_K, "L": Qt.Key.Key_L,
+    "M": Qt.Key.Key_M, "N": Qt.Key.Key_N, "O": Qt.Key.Key_O,
+    "P": Qt.Key.Key_P, "Q": Qt.Key.Key_Q, "R": Qt.Key.Key_R,
+    "S": Qt.Key.Key_S, "T": Qt.Key.Key_T, "U": Qt.Key.Key_U,
+    "V": Qt.Key.Key_V, "W": Qt.Key.Key_W, "X": Qt.Key.Key_X,
+    "Y": Qt.Key.Key_Y, "Z": Qt.Key.Key_Z,
+    "0": Qt.Key.Key_0, "1": Qt.Key.Key_1, "2": Qt.Key.Key_2,
+    "3": Qt.Key.Key_3, "4": Qt.Key.Key_4, "5": Qt.Key.Key_5,
+    "6": Qt.Key.Key_6, "7": Qt.Key.Key_7, "8": Qt.Key.Key_8,
+    "9": Qt.Key.Key_9,
+    "F1": Qt.Key.Key_F1, "F2": Qt.Key.Key_F2, "F3": Qt.Key.Key_F3,
+    "F4": Qt.Key.Key_F4, "F5": Qt.Key.Key_F5, "F6": Qt.Key.Key_F6,
+    "F7": Qt.Key.Key_F7, "F8": Qt.Key.Key_F8, "F9": Qt.Key.Key_F9,
+    "F10": Qt.Key.Key_F10, "F11": Qt.Key.Key_F11, "F12": Qt.Key.Key_F12,
+}
+
+
+class ShortcutConfigDialog(QDialog):
+    """Dialog for configuring keyboard shortcuts."""
+
+    def __init__(self, shortcuts: dict, lang: str = "ko", parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("shortcut_settings", lang))
+        self.setWindowIcon(get_app_icon())
+        self.setMinimumWidth(400)
+        self.lang = lang
+        self.shortcuts = dict(shortcuts)  # copy
+        self.key_edits: Dict[str, ShortcutKeyEdit] = {}
+
+        layout = QVBoxLayout(self)
+
+        # Description label
+        desc_label = QLabel(tr("shortcut_description", lang))
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("padding: 5px; color: #888;")
+        layout.addWidget(desc_label)
+
+        # Shortcut rows
+        form_group = QGroupBox(tr("shortcut_settings", lang))
+        form_layout = QVBoxLayout(form_group)
+
+        for action_key in DEFAULT_SHORTCUTS:
+            row_layout = QHBoxLayout()
+            tr_key = SHORTCUT_ACTION_TR_KEYS.get(action_key, action_key)
+            label = QLabel(tr(tr_key, lang))
+            label.setMinimumWidth(150)
+            row_layout.addWidget(label)
+
+            key_edit = ShortcutKeyEdit()
+            current_key = self.shortcuts.get(action_key, "")
+            key_edit.set_key_name(current_key)
+            key_edit.setMinimumWidth(120)
+            row_layout.addWidget(key_edit)
+            self.key_edits[action_key] = key_edit
+
+            form_layout.addLayout(row_layout)
+
+        layout.addWidget(form_group)
+
+        # Reset to defaults button
+        reset_btn = QPushButton(tr("shortcut_reset", lang))
+        reset_btn.clicked.connect(self._reset_defaults)
+        layout.addWidget(reset_btn)
+
+        # OK / Cancel buttons
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btn_box.accepted.connect(self._on_accept)
+        btn_box.rejected.connect(self.reject)
+        layout.addWidget(btn_box)
+
+    def _reset_defaults(self):
+        """Reset all shortcuts to default values."""
+        for action_key, default_key in DEFAULT_SHORTCUTS.items():
+            if action_key in self.key_edits:
+                self.key_edits[action_key].set_key_name(default_key)
+
+    def _on_accept(self):
+        """Validate and accept shortcuts."""
+        new_shortcuts = {}
+        used_keys = {}
+
+        for action_key, key_edit in self.key_edits.items():
+            key_name = key_edit.get_key_name()
+            if key_name:
+                # Check for duplicates
+                if key_name in used_keys:
+                    conflict_action = used_keys[key_name]
+                    tr_key1 = SHORTCUT_ACTION_TR_KEYS.get(action_key, action_key)
+                    tr_key2 = SHORTCUT_ACTION_TR_KEYS.get(conflict_action, conflict_action)
+                    QMessageBox.warning(
+                        self,
+                        tr("warning", self.lang),
+                        f"{tr(tr_key1, self.lang)} / {tr(tr_key2, self.lang)}: "
+                        f"{tr('shortcut_duplicate', self.lang)} ({key_name})"
+                    )
+                    return
+                used_keys[key_name] = action_key
+            new_shortcuts[action_key] = key_name
+
+        self.shortcuts = new_shortcuts
+        self.accept()
+
+    def get_shortcuts(self) -> dict:
+        """Return the configured shortcuts dict."""
+        return dict(self.shortcuts)
+
+
 # ============== Main Window ==============
 class MainWindow(QMainWindow):
     """Main window for the croquis practice app."""
@@ -3132,7 +3310,7 @@ class MainWindow(QMainWindow):
         
     def setup_ui(self):
         self.setWindowTitle(tr("app_title", self.lang))
-        self.setFixedSize(750, 750)
+        self.setFixedSize(750, 800)
         
         central = QWidget()
         self.setCentralWidget(central)
@@ -3411,6 +3589,11 @@ class MainWindow(QMainWindow):
         self.alarm_btn.clicked.connect(self.open_alarm)
         button_layout.addWidget(self.alarm_btn)
         
+        self.shortcut_btn = QPushButton()
+        self.shortcut_btn.setMinimumHeight(32)
+        self.shortcut_btn.clicked.connect(self.open_shortcut_settings)
+        button_layout.addWidget(self.shortcut_btn)
+        
         main_layout.addLayout(button_layout)
         
         # Enable/disable time input based on study mode
@@ -3513,6 +3696,7 @@ class MainWindow(QMainWindow):
         self.edit_deck_btn.setText(tr("edit_deck", self.lang))
         self.history_btn.setText(tr("croquis_history", self.lang))
         self.alarm_btn.setText(tr("croquis_alarm", self.lang))
+        self.shortcut_btn.setText(tr("shortcut_settings", self.lang))
         
     def apply_dark_mode(self):
         """
@@ -3834,6 +4018,15 @@ class MainWindow(QMainWindow):
         dialog.exec()
         logger.info(LOG_MESSAGES["alarm_settings_closed"])
         
+    def open_shortcut_settings(self):
+        """Open shortcut key configuration dialog."""
+        current_shortcuts = getattr(self.settings, 'shortcuts', DEFAULT_SHORTCUTS.copy())
+        dialog = ShortcutConfigDialog(current_shortcuts, self.lang, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.settings.shortcuts = dialog.get_shortcuts()
+            self.save_settings()
+            logger.info("Shortcut settings updated")
+        
     def load_settings(self):
         """Load settings from disk."""
         dat_dir = get_data_path() / "dat"
@@ -3890,14 +4083,14 @@ def main():
         except ImportError:
             logger.warning("Failed to import Qt resources")
     
-    # Load QSS stylesheet
-    qss_path = Path(__file__).parent / "assets" / "style.qss"
+    # Load QSS stylesheet (if available)
+    qss_path = Path(__file__).parent / "src" / "assets" / "style.qss"
     if qss_path.exists():
         with open(qss_path, 'r', encoding='utf-8') as f:
             app.setStyleSheet(f.read())
         logger.info("QSS stylesheet loaded successfully")
     else:
-        logger.warning(f"QSS stylesheet not found at {qss_path}")
+        logger.debug(f"No QSS stylesheet found at {qss_path}, using default styles")
     
     window = MainWindow()
     window.show()

@@ -16,10 +16,11 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, pyqtSignal
 from PyQt6.QtGui import (
-    QPixmap, QImage, QFont, QMouseEvent, QTransform, QGuiApplication
+    QPixmap, QImage, QFont, QMouseEvent, QTransform, QGuiApplication,
+    QKeyEvent
 )
 
-from core.models import CroquisSettings
+from core.models import CroquisSettings, DEFAULT_SHORTCUTS
 from core.key_manager import decrypt_data
 from utils.helpers import get_app_icon, get_data_path, tr
 from utils.qt_resource_loader import QtResourceLoader
@@ -544,3 +545,69 @@ class ImageViewerWindow(QWidget):
         super().resizeEvent(event)
         self.update_timer_position()
         self.update_today_count_position()
+
+    # --- Shortcut key mapping ---
+    _KEY_NAME_TO_QT = {
+        "Space": Qt.Key.Key_Space,
+        "Escape": Qt.Key.Key_Escape,
+        "Enter": Qt.Key.Key_Return,
+        "Return": Qt.Key.Key_Return,
+        "Left": Qt.Key.Key_Left,
+        "Right": Qt.Key.Key_Right,
+        "Up": Qt.Key.Key_Up,
+        "Down": Qt.Key.Key_Down,
+        "Tab": Qt.Key.Key_Tab,
+        "Backspace": Qt.Key.Key_Backspace,
+        "Delete": Qt.Key.Key_Delete,
+        "A": Qt.Key.Key_A, "B": Qt.Key.Key_B, "C": Qt.Key.Key_C,
+        "D": Qt.Key.Key_D, "E": Qt.Key.Key_E, "F": Qt.Key.Key_F,
+        "G": Qt.Key.Key_G, "H": Qt.Key.Key_H, "I": Qt.Key.Key_I,
+        "J": Qt.Key.Key_J, "K": Qt.Key.Key_K, "L": Qt.Key.Key_L,
+        "M": Qt.Key.Key_M, "N": Qt.Key.Key_N, "O": Qt.Key.Key_O,
+        "P": Qt.Key.Key_P, "Q": Qt.Key.Key_Q, "R": Qt.Key.Key_R,
+        "S": Qt.Key.Key_S, "T": Qt.Key.Key_T, "U": Qt.Key.Key_U,
+        "V": Qt.Key.Key_V, "W": Qt.Key.Key_W, "X": Qt.Key.Key_X,
+        "Y": Qt.Key.Key_Y, "Z": Qt.Key.Key_Z,
+        "0": Qt.Key.Key_0, "1": Qt.Key.Key_1, "2": Qt.Key.Key_2,
+        "3": Qt.Key.Key_3, "4": Qt.Key.Key_4, "5": Qt.Key.Key_5,
+        "6": Qt.Key.Key_6, "7": Qt.Key.Key_7, "8": Qt.Key.Key_8,
+        "9": Qt.Key.Key_9,
+        "F1": Qt.Key.Key_F1, "F2": Qt.Key.Key_F2, "F3": Qt.Key.Key_F3,
+        "F4": Qt.Key.Key_F4, "F5": Qt.Key.Key_F5, "F6": Qt.Key.Key_F6,
+        "F7": Qt.Key.Key_F7, "F8": Qt.Key.Key_F8, "F9": Qt.Key.Key_F9,
+        "F10": Qt.Key.Key_F10, "F11": Qt.Key.Key_F11, "F12": Qt.Key.Key_F12,
+    }
+
+    def _build_shortcut_map(self) -> dict:
+        """Build a mapping from Qt key codes to action names based on settings."""
+        shortcuts = getattr(self.settings, 'shortcuts', DEFAULT_SHORTCUTS)
+        key_map = {}
+        for action, key_name in shortcuts.items():
+            if key_name and key_name in self._KEY_NAME_TO_QT:
+                qt_key = self._KEY_NAME_TO_QT[key_name]
+                key_map[qt_key] = action
+        return key_map
+
+    def keyPressEvent(self, event: QKeyEvent):
+        """Handle keyboard shortcuts for the croquis viewer."""
+        key_map = self._build_shortcut_map()
+        pressed_key = event.key()
+
+        action = key_map.get(pressed_key)
+        if action is None:
+            super().keyPressEvent(event)
+            return
+
+        if action == "next_image":
+            self.next_image_no_screenshot()
+        elif action == "previous_image":
+            self.previous_image()
+        elif action == "toggle_pause":
+            self.toggle_pause()
+        elif action == "stop_croquis":
+            self.stop_croquis()
+        else:
+            super().keyPressEvent(event)
+            return
+
+        event.accept()
